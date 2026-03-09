@@ -4,6 +4,8 @@
 
 Learn to test database interactions using Entity Framework Core. Write tests for repositories, queries, and migrations using in-memory and SQLite test providers.
 
+**Duration:** 60 minutes
+
 ## Prerequisites
 
 Before starting this lab, make sure you have:
@@ -110,7 +112,7 @@ Write tests using `InMemoryDatabase`:
 3. Test `GetTopStudentsAsync` returns correct ordering
 4. Each test uses a unique database name for isolation
 
-**Minimum test count: 8 tests**
+**Minimum test count: 6 tests**
 
 #### Example: InMemory Provider Setup
 
@@ -246,7 +248,7 @@ Write tests that:
 4. Test that concurrent updates are handled (optimistic concurrency)
 5. Compare behavior differences between InMemory and SQLite providers (document in comments)
 
-**Minimum test count: 6 tests**
+**Minimum test count: 5 tests**
 
 #### Example: SQLite Provider Setup
 
@@ -389,7 +391,7 @@ Write tests that:
 4. Verify that EF migrations apply cleanly to a fresh database
 5. Compare query behavior between SQLite and SQL Server (document differences)
 
-**Minimum test count: 6 tests**
+**Minimum test count: 4 tests**
 
 > **Prerequisite**: Docker must be installed and running.
 
@@ -487,110 +489,6 @@ public class SqlServerTests : IAsyncLifetime
 
 > **Hint:** Testcontainers tests are slower (container startup takes 10-30 seconds). Use `IAsyncLifetime` at the class level and share the container across tests within the same class. Mark these tests with `[Trait("Category", "Integration")]` so they can be filtered during local development.
 
-### Task 4 — Query Testing
-
-Write tests for complex LINQ queries (using any provider):
-
-1. Get all students enrolled in a specific course
-2. Get courses with no enrollments
-3. Get average grade per course
-4. Get students enrolled in more than N courses
-
-**Minimum test count: 4 tests**
-
-#### Example: LINQ Query Tests with Shouldly
-
-```csharp
-[Fact]
-public async Task GetStudentsEnrolledInCourse_ReturnsCorrectStudentsAsync()
-{
-    // Arrange
-    using var context = CreateInMemoryContext();
-    var mathCourse = new Course { Title = "Math", Credits = 4 };
-    var artCourse = new Course { Title = "Art", Credits = 2 };
-
-    var alice = new Student
-    {
-        FullName = "Alice", Email = "alice@q.com",
-        EnrollmentDate = DateTime.UtcNow,
-        Enrollments = new List<Enrollment> { new() { Course = mathCourse, Grade = 90 } }
-    };
-    var bob = new Student
-    {
-        FullName = "Bob", Email = "bob@q.com",
-        EnrollmentDate = DateTime.UtcNow,
-        Enrollments = new List<Enrollment> { new() { Course = artCourse, Grade = 80 } }
-    };
-
-    context.Students.AddRange(alice, bob);
-    await context.SaveChangesAsync();
-
-    // Act
-    var mathStudents = await context.Students
-        .Where(s => s.Enrollments.Any(e => e.Course.Title == "Math"))
-        .ToListAsync();
-
-    // Assert
-    mathStudents.Count.ShouldBe(1);
-    mathStudents.First().FullName.ShouldBe("Alice");
-}
-
-[Fact]
-public async Task GetCoursesWithNoEnrollments_ReturnsEmptyCoursesAsync()
-{
-    // Arrange
-    using var context = CreateInMemoryContext();
-    context.Courses.Add(new Course { Title = "Physics", Credits = 3 });
-    context.Courses.Add(new Course { Title = "Chemistry", Credits = 3 });
-    var math = new Course { Title = "Math", Credits = 4 };
-    context.Students.Add(new Student
-    {
-        FullName = "Test", Email = "t@t.com",
-        EnrollmentDate = DateTime.UtcNow,
-        Enrollments = new List<Enrollment> { new() { Course = math, Grade = 85 } }
-    });
-    await context.SaveChangesAsync();
-
-    // Act
-    var emptyCourses = await context.Courses
-        .Where(c => !c.Enrollments.Any())
-        .ToListAsync();
-
-    // Assert
-    emptyCourses.Count.ShouldBe(2);
-    emptyCourses.ShouldContain(c => c.Title == "Physics");
-    emptyCourses.ShouldContain(c => c.Title == "Chemistry");
-}
-
-[Fact]
-public async Task GetAverageGradePerCourse_ReturnsCorrectAveragesAsync()
-{
-    // Arrange
-    using var context = CreateInMemoryContext();
-    var course = new Course { Title = "History", Credits = 3 };
-    context.Enrollments.AddRange(
-        new Enrollment { Course = course, Student = new Student { FullName = "A", Email = "a@t.com", EnrollmentDate = DateTime.UtcNow }, Grade = 80 },
-        new Enrollment { Course = course, Student = new Student { FullName = "B", Email = "b@t.com", EnrollmentDate = DateTime.UtcNow }, Grade = 90 }
-    );
-    await context.SaveChangesAsync();
-
-    // Act
-    var averages = await context.Courses
-        .Select(c => new
-        {
-            c.Title,
-            AvgGrade = c.Enrollments.Where(e => e.Grade.HasValue).Average(e => e.Grade!.Value)
-        })
-        .ToListAsync();
-
-    // Assert
-    var history = averages.First(a => a.Title == "History");
-    history.AvgGrade.ShouldBe(85m);
-}
-```
-
-> **Hint:** Seed enough data to make queries meaningful -- at least 3 students and 3 courses with various enrollment combinations. Consider edge cases like students with no enrollments and courses with all null grades.
-
 ## Grading
 
 | Criteria |
@@ -598,7 +496,6 @@ public async Task GetAverageGradePerCourse_ReturnsCorrectAveragesAsync()
 | Task 1 — InMemory repository tests |
 | Task 2 — SQLite relational tests |
 | Task 3 — Testcontainers tests |
-| Task 4 — Query tests |
 | Test isolation and proper async patterns |
 
 ## Submission

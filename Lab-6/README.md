@@ -4,6 +4,8 @@
 
 Test transactional behavior, data seeding, migration correctness, and repository patterns with real database constraints.
 
+**Duration:** 60 minutes
+
 ## Prerequisites
 
 Before starting this lab, make sure you have:
@@ -94,7 +96,7 @@ Write tests that verify:
 4. Transfer of zero or negative amount is rejected
 5. Concurrent transfers from the same account do not cause negative balance
 
-**Minimum test count: 7 tests**
+**Minimum test count: 5 tests**
 
 > **Prerequisite**: Docker must be installed and running.
 
@@ -274,75 +276,7 @@ public async Task ConcurrentTransfers_DoNotCauseNegativeBalanceAsync()
 
 > **Hint:** For concurrent transfer testing, each parallel task must use its own `DbContext` instance (EF Core contexts are not thread-safe). Use `IDbContextFactory<AppDbContext>` or manually create new contexts with the same connection string. Consider using `[ConcurrencyCheck]` on the `Balance` property or a `[Timestamp]` row version column.
 
-### Task 2 — Data Seeding and Migration Tests
-
-Create a seed data configuration and test:
-
-1. Verify seed data is applied correctly after migration
-2. Verify adding a new required column with default value migrates existing data
-3. Test that removing a column does not lose data in remaining columns
-4. Verify index creation improves query plan (use `EXPLAIN` with SQLite)
-
-**Minimum test count: 4 tests**
-
-#### Example: Seed Data and Migration Tests with Shouldly
-
-```csharp
-[Fact]
-public async Task SeedData_AppliedAfterMigrationAsync()
-{
-    // Arrange
-    var (context, connection) = CreateSqliteContext();
-    using (connection)
-    using (context)
-    {
-        // Act — EnsureCreated applies the schema and seed data
-        await context.Database.EnsureCreatedAsync();
-
-        // Assert
-        var accounts = await context.BankAccounts.ToListAsync();
-        accounts.ShouldNotBeEmpty();
-        accounts.ShouldContain(a => a.AccountNumber == "ACC-SEED-001");
-    }
-}
-
-[Fact]
-public async Task IndexCreation_VisibleInQueryPlanAsync()
-{
-    // Arrange
-    var (context, connection) = CreateSqliteContext();
-    using (connection)
-    using (context)
-    {
-        // Create index
-        await context.Database.ExecuteSqlRawAsync(
-            "CREATE INDEX IF NOT EXISTS IX_BankAccounts_AccountNumber ON BankAccounts(AccountNumber)");
-
-        // Seed data
-        for (int i = 0; i < 100; i++)
-        {
-            context.BankAccounts.Add(new BankAccount
-            {
-                AccountNumber = $"ACC-{i:D4}", OwnerName = $"Owner {i}", Balance = 100m
-            });
-        }
-        await context.SaveChangesAsync();
-
-        // Act — run EXPLAIN to see query plan
-        var plan = await context.Database
-            .SqlQueryRaw<string>("EXPLAIN QUERY PLAN SELECT * FROM BankAccounts WHERE AccountNumber = 'ACC-0050'")
-            .ToListAsync();
-
-        // Assert — plan should mention the index
-        var planText = string.Join(" ", plan);
-        planText.ShouldContain("IX_BankAccounts_AccountNumber");
-    }
-}
-```
-
-> **Hint:** For migration tests, you can use `context.Database.MigrateAsync()` instead of `EnsureCreated()`. To test schema changes, create separate migration snapshots or use `ExecuteSqlRawAsync` to simulate `ALTER TABLE` operations directly.
-
-### Task 3 — Audit Trail Testing
+### Task 2 — Audit Trail Testing
 
 Implement an audit trail using EF Core interceptors or `SaveChanges` override:
 
@@ -364,7 +298,7 @@ Write tests that verify:
 3. Deleting an entity generates a log with `Action = "Deleted"`
 4. Audit log is written in the same transaction as the entity change
 
-**Minimum test count: 5 tests**
+**Minimum test count: 4 tests**
 
 #### Example: SaveChanges Override for Auditing
 
@@ -536,8 +470,7 @@ public async Task AuditLog_WrittenInSameTransactionAsync()
 | Criteria |
 |----------|
 | Task 1 — Transaction tests |
-| Task 2 — Seeding and migration tests |
-| Task 3 — Audit trail tests |
+| Task 2 — Audit trail tests |
 | Correct transaction rollback verification |
 | Test isolation and cleanup |
 

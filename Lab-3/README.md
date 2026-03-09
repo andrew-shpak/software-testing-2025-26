@@ -4,6 +4,8 @@
 
 Learn to write integration tests that verify how multiple components work together. Test real interactions between services, repositories, and middleware without mocking everything.
 
+**Duration:** 60 minutes
+
 ## Prerequisites
 
 Before starting this lab, make sure you have:
@@ -69,7 +71,7 @@ Write integration tests using `WebApplicationFactory<Program>`:
 3. Test `GET /api/products/{id}` returns 200 for existing and 404 for non-existing
 4. Test `POST /api/products` creates a product and returns 201
 
-**Minimum test count: 6 tests**
+**Minimum test count: 5 tests**
 
 #### Example: Custom WebApplicationFactory
 
@@ -179,7 +181,7 @@ Write integration tests that:
 3. Verify unhandled exceptions return structured JSON error response
 4. Verify the pipeline processes requests in correct order
 
-**Minimum test count: 6 tests**
+**Minimum test count: 5 tests**
 
 #### Example: Middleware Test with Shouldly
 
@@ -246,72 +248,12 @@ public async Task UnhandledException_ReturnsStructuredJsonErrorAsync()
 
 > **Hint:** For pipeline ordering, consider adding a custom response header from each middleware (e.g., `X-Pipeline-Step: 1`, `X-Pipeline-Step: 2`) and verifying the order in the response.
 
-### Task 3 — Dependency Injection Verification
-
-Write tests that verify:
-
-1. All required services are registered in the DI container
-2. Scoped services create new instances per request
-3. Singleton services return the same instance
-4. Replacing a service in tests does not affect other registrations
-
-**Minimum test count: 5 tests**
-
-#### Example: DI Verification with Shouldly
-
-```csharp
-[Fact]
-public void AllRequiredServices_AreRegistered()
-{
-    // Arrange
-    using var scope = _factory.Services.CreateScope();
-
-    // Act & Assert
-    var repo = scope.ServiceProvider.GetService<IProductRepository>();
-    repo.ShouldNotBeNull();
-
-    var controller = scope.ServiceProvider.GetService<ProductsController>();
-    // Controllers are not registered by default, so resolve via ControllerActivator or check services
-}
-
-[Fact]
-public void ScopedService_CreatesNewInstancePerScope()
-{
-    // Arrange & Act
-    using var scope1 = _factory.Services.CreateScope();
-    using var scope2 = _factory.Services.CreateScope();
-
-    var instance1 = scope1.ServiceProvider.GetRequiredService<IScopedService>();
-    var instance2 = scope2.ServiceProvider.GetRequiredService<IScopedService>();
-
-    // Assert
-    instance1.ShouldNotBeSameAs(instance2);
-}
-
-[Fact]
-public void SingletonService_ReturnsSameInstance()
-{
-    // Arrange & Act
-    using var scope1 = _factory.Services.CreateScope();
-    using var scope2 = _factory.Services.CreateScope();
-
-    var instance1 = scope1.ServiceProvider.GetRequiredService<ISingletonService>();
-    var instance2 = scope2.ServiceProvider.GetRequiredService<ISingletonService>();
-
-    // Assert
-    instance1.ShouldBeSameAs(instance2);
-}
-```
-
-> **Hint:** You can access the DI container directly via `WebApplicationFactory.Services`. Use `CreateScope()` to simulate scoped lifetimes similar to HTTP requests.
-
 ## Grading
 
 | Criteria |
 |----------|
 | Task 1 — WebApplicationFactory tests |
 | Task 2 — Middleware tests |
-| Task 3 — DI verification tests |
 | Proper test isolation (each test is independent) |
 | Use of `IClassFixture` or `IAsyncLifetime` |
 

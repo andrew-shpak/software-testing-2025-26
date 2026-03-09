@@ -4,6 +4,8 @@
 
 Write end-to-end tests that verify complete user workflows through a web application, covering UI interactions, navigation, form submissions, and API calls.
 
+**Duration:** 60 minutes
+
 ## Prerequisites
 
 Before starting this lab, make sure you have:
@@ -172,22 +174,11 @@ Write E2E tests covering full user workflows:
    - Save changes
    - Verify changes are persisted
 
-3. **Delete task workflow**:
-   - Navigate to task details
-   - Click "Delete"
-   - Confirm deletion
-   - Verify task is removed from list
-
-4. **Validation workflow**:
+3. **Validation workflow**:
    - Try to submit empty form
    - Verify validation messages appear
    - Fill required fields one by one
    - Verify validation messages disappear
-
-5. **Navigation workflow**:
-   - Verify all navigation links work
-   - Verify browser back/forward works correctly
-   - Verify page titles are correct
 
 #### Starting the App for Tests
 
@@ -298,21 +289,19 @@ public class TaskWorkflowTests : IClassFixture<WebAppFixture>, IAsyncLifetime
 
 ### Task 3 — Advanced E2E Patterns
 
-Implement:
+Implement the **Page Object Model** — create page classes for each page:
 
-1. **Page Object Model**: Create page classes for each page:
-   ```csharp
-   public class TaskListPage
-   {
-       private readonly IPage _page;
-       public async Task<TaskCreatePage> ClickCreateNew() { ... }
-       public async Task<int> GetTaskCount() { ... }
-       public async Task<bool> HasTask(string title) { ... }
-   }
-   ```
+```csharp
+public class TaskListPage
+{
+    private readonly IPage _page;
+    public async Task<TaskCreatePage> ClickCreateNew() { ... }
+    public async Task<int> GetTaskCount() { ... }
+    public async Task<bool> HasTask(string title) { ... }
+}
+```
 
-2. **Screenshot on failure**: Capture screenshots when tests fail
-3. **Test data cleanup**: Ensure each test starts with clean state
+Refactor your Task 2 tests to use these page objects instead of raw selectors.
 
 #### Page Object Model Example
 
@@ -392,76 +381,6 @@ public async Task DisposeAsync()
 
 > **Hint:** Create a `screenshots/` directory in your test project and add it to `.gitignore`. Screenshots are for local debugging and CI artifacts, not for committing to the repository.
 
-### Task 4 — Cross-Browser Testing
-
-Run the same test suite on:
-
-1. Chromium
-2. Firefox
-3. WebKit (Safari)
-
-Use `[Theory]` with browser types:
-
-```csharp
-[Theory]
-[InlineData("chromium")]
-[InlineData("firefox")]
-[InlineData("webkit")]
-public async Task CreateTask_ShouldWork_OnAllBrowsers(string browserType) { ... }
-```
-
-Document any cross-browser differences found.
-
-#### Cross-Browser Launch Example
-
-```csharp
-[Theory]
-[InlineData("chromium")]
-[InlineData("firefox")]
-[InlineData("webkit")]
-public async Task CreateTask_ShouldWork_OnAllBrowsers(string browserType)
-{
-    using var playwright = await Playwright.CreateAsync();
-
-    var browser = browserType switch
-    {
-        "chromium" => await playwright.Chromium.LaunchAsync(new() { Headless = true }),
-        "firefox" => await playwright.Firefox.LaunchAsync(new() { Headless = true }),
-        "webkit" => await playwright.Webkit.LaunchAsync(new() { Headless = true }),
-        _ => throw new ArgumentException($"Unknown browser: {browserType}")
-    };
-
-    var page = await browser.NewPageAsync();
-
-    try
-    {
-        await page.GotoAsync($"{_fixture.BaseUrl}/Tasks/Create");
-        await page.GetByLabel("Title").FillAsync("Cross-browser test");
-        await page.GetByLabel("Priority").SelectOptionAsync("High");
-        await page.GetByRole(AriaRole.Button, new() { Name = "Create" }).ClickAsync();
-
-        var taskInList = page.GetByText("Cross-browser test");
-        await Expect(taskInList).ToBeVisibleAsync();
-    }
-    finally
-    {
-        await browser.DisposeAsync();
-    }
-}
-```
-
-#### Common Cross-Browser Differences to Watch For
-
-| Area | Potential Differences |
-|------|----------------------|
-| Date input | Chromium uses date picker; Firefox/WebKit may need different input format |
-| Form validation | Validation popups look different; messages may vary |
-| CSS rendering | Minor visual differences (fonts, spacing) |
-| JavaScript timing | Event handling order can vary between engines |
-| File upload | Dialog behavior differs between browsers |
-
-> **Hint:** If a test fails on only one browser, use `Headless = false` to launch that browser visually and debug the issue interactively. You can also use `await page.PauseAsync()` to pause execution and inspect the page with Playwright Inspector.
-
 ## Grading
 
 | Criteria |
@@ -469,7 +388,6 @@ public async Task CreateTask_ShouldWork_OnAllBrowsers(string browserType)
 | Task 1 — Web application |
 | Task 2 — E2E workflow tests |
 | Task 3 — Page Object Model and patterns |
-| Task 4 — Cross-browser tests |
 | Test stability (no flaky tests) |
 
 ## Submission

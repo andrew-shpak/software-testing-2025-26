@@ -4,6 +4,8 @@
 
 Learn to isolate units under test using mocking frameworks. Understand the difference between stubs, mocks, fakes, and spies. Apply dependency injection to make code testable.
 
+**Duration:** 60 minutes
+
 ## Prerequisites
 
 - Completed Lab 1
@@ -116,6 +118,8 @@ public void PlaceOrder_WhenPaymentSucceeds_SavesOrderAndSendsConfirmation()
 }
 ```
 
+> **Note:** Include at least 2 tests that verify call order, argument capture, or `DidNotReceive()` patterns.
+
 **Minimum test count:** 10 tests
 
 ### Task 2 — Weather Forecast Service
@@ -155,30 +159,7 @@ Write tests that:
 4. Handle API exceptions gracefully (return cached data or throw custom exception)
 5. Test async methods properly with `async Task` test methods
 
-**Minimum test count:** 8 tests
-
-### Task 3 — Verify Call Order and Arguments
-
-Using `NSubstitute.Received()`:
-
-1. Verify methods are called in the expected order (use `Received().InOrder()`)
-2. Capture and assert arguments passed to mocked methods using `Arg.Is<T>()`
-3. Verify a method was called exactly N times
-4. Verify a method was never called in certain scenarios using `DidNotReceive()`
-
-**Example:**
-
-```csharp
-[Fact]
-public void CancelOrder_WhenOrderIsPending_SendsCancellationNotification()
-{
-    // ...
-    notifications.DidNotReceive().SendOrderConfirmation(Arg.Any<string>(), Arg.Any<int>());
-    notifications.Received(1).SendOrderCancellation("user@test.com", 42);
-}
-```
-
-**Minimum test count:** 6 tests
+**Minimum test count:** 5 tests
 
 ## Grading
 
@@ -186,7 +167,6 @@ public void CancelOrder_WhenOrderIsPending_SendsCancellationNotification()
 |----------|
 | Task 1 — Order service tests |
 | Task 2 — Weather service tests |
-| Task 3 — Verification tests |
 | Correct use of NSubstitute mock/stub/verify |
 | Clean dependency injection |
 
@@ -194,7 +174,7 @@ public void CancelOrder_WhenOrderIsPending_SendsCancellationNotification()
 
 - Solution with `Lab2.Core` and `Lab2.Tests` projects
 - All dependencies injected via constructor (no `new` inside service classes)
-- Minimum 24 total tests
+- Minimum 15 total tests
 
 ## References
 

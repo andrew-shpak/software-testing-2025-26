@@ -4,6 +4,8 @@
 
 Set up automated testing pipelines using GitHub Actions. Configure test execution, code coverage reporting, and quality gates that run on every push and pull request.
 
+**Duration:** 60 minutes
+
 ## Prerequisites
 
 Before starting this lab, make sure you have:
@@ -169,7 +171,7 @@ Extend the pipeline to:
 2. Generate HTML report with ReportGenerator
 3. Upload coverage report as GitHub Actions artifact
 4. Add a coverage threshold — fail the pipeline if coverage drops below 80%
-5. Display coverage summary in the workflow output
+5. Configure the pipeline to also run on `pull_request` events
 
 #### Complete Coverage Pipeline Example
 
@@ -231,7 +233,6 @@ strategy:
 
 1. Run tests on all OS + .NET version combinations
 2. Ensure all matrix jobs must pass for the pipeline to succeed
-3. Add a separate job for linting / code style checks (optional: `dotnet format --verify-no-changes`)
 
 #### Full Matrix Job Example
 
@@ -280,61 +281,6 @@ jobs:
 
 > **Hint:** Set `fail-fast: false` during development so you can see which specific OS/version combinations fail. In production pipelines, `fail-fast: true` saves CI minutes by stopping early.
 
-### Task 4 — Pull Request Workflow
-
-Create a complete PR workflow:
-
-1. Run tests on PR creation and update
-2. Post test results as PR comment (use an action like `dorny/test-reporter`)
-3. Add branch protection rules (document in `REPORT.md`):
-   - Require CI to pass before merge
-   - Require at least 1 approval
-   - Require up-to-date branch
-4. Create a sample PR demonstrating:
-   - Green pipeline (all tests pass)
-   - Red pipeline (introduce a failing test, then fix it)
-
-#### Test Reporter Step Example
-
-```yaml
-- name: Test
-  run: dotnet test --no-build --logger "trx;LogFileName=test-results.trx" --results-directory ./test-results
-
-- name: Publish Test Results
-  uses: dorny/test-reporter@v1
-  if: always()
-  with:
-    name: 'xUnit Test Results'
-    path: './test-results/**/*.trx'
-    reporter: dotnet-trx
-```
-
-> **Hint:** The `if: always()` condition is critical. Without it, the test reporter step would be skipped when tests fail -- which is exactly when you need the report the most.
-
-#### Branch Protection Rules
-
-To configure branch protection on GitHub:
-
-1. Go to **Settings** > **Branches** > **Add branch protection rule**
-2. Set **Branch name pattern** to `main`
-3. Enable:
-   - "Require a pull request before merging"
-   - "Require approvals" (set to 1)
-   - "Require status checks to pass before merging" (select your CI workflow)
-   - "Require branches to be up to date before merging"
-
-Document these settings and take screenshots for your `REPORT.md`.
-
-#### PR Workflow Demonstration Steps
-
-To demonstrate both green and red pipelines:
-
-1. Create a feature branch: `git checkout -b feature/demo-ci`
-2. Add a passing test, push, create a PR -- observe green pipeline
-3. Push a commit with a deliberately failing test -- observe red pipeline
-4. Fix the test and push again -- observe pipeline turns green
-5. Include screenshots of all three states in your `REPORT.md`
-
 ## Grading
 
 | Criteria |
@@ -342,14 +288,10 @@ To demonstrate both green and red pipelines:
 | Task 1 — Basic CI pipeline |
 | Task 2 — Coverage gate |
 | Task 3 — Matrix testing |
-| Task 4 — PR workflow |
 
 ## Submission
 
 - GitHub repository URL with working pipeline
-- Screenshot of green and red pipeline runs
-- `REPORT.md` documenting pipeline configuration decisions
-- Link to a sample PR with CI checks visible
 
 ## References
 

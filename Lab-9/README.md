@@ -4,6 +4,8 @@
 
 Test external REST API integrations using HTTP client abstraction, response handling, retry policies, and simulated API behavior with WireMock.
 
+**Duration:** 60 minutes
+
 ## Prerequisites
 
 - .NET 10 SDK or later installed
@@ -155,7 +157,7 @@ public class UserApiClient : IUserApiClient
 | 502 Bad Gateway | Throw `ApiException` (transient, eligible for retry) |
 | 503 Service Unavailable | Throw `ApiException` (transient, eligible for retry) |
 
-**Minimum test count for Task 1**: 5 tests (one per interface method verifying the happy path).
+**Minimum test count for Task 1**: 4 tests (covering the main interface methods verifying the happy path).
 
 > **Hint**: Register `UserApiClient` as a typed client so `IHttpClientFactory` manages its `HttpClient` lifetime. This avoids socket exhaustion:
 > ```csharp
@@ -179,9 +181,11 @@ Write tests that:
 2. Mock `GET /users/999` returning 404 — verify `NotFoundException` is thrown
 3. Mock `POST /users` returning 201 with `Location` header — verify response parsing
 4. Mock `GET /users` with query parameters — verify pagination is sent correctly
-5. Mock slow response (5 second delay) — verify timeout handling
-6. Mock sequence: first call returns 500, second returns 200 — verify retry works
-7. Verify request headers (`Content-Type`, `Authorization`) are sent correctly
+
+*Optional (if time allows):*
+- Mock slow response (5 second delay) — verify timeout handling
+- Mock sequence: first call returns 500, second returns 200 — verify retry works
+- Verify request headers (`Content-Type`, `Authorization`) are sent correctly
 
 **Example — WireMock Test Fixture with IAsyncLifetime**
 
@@ -342,140 +346,13 @@ public async Task CreateUserAsync_SendsCorrectContentTypeAsync()
 }
 ```
 
-**Minimum test count for Task 2**: 7 tests (one per scenario listed above).
+**Minimum test count for Task 2**: 5 tests (4 required scenarios above + at least 1 optional scenario).
+
+**Bonus (if time allows):** Configure resilience with `AddStandardResilienceHandler` and test retry behavior.
 
 > **Hint**: Always reset the WireMock server between tests if they share an instance. You can call `_server.Reset()` in a setup method, or use `IAsyncLifetime` to create a fresh server per class. If individual test isolation is critical, create the server per-test instead.
 
 > **Hint**: Use WireMock's `InScenario` / `WillSetStateTo` / `WhenStateIs` API to create stateful response sequences (e.g., first call fails, second succeeds).
-
-### Task 3 — Resilience Testing with Microsoft.Extensions.Http.Resilience
-
-Configure `IHttpClientFactory` with the standard resilience handler:
-
-```csharp
-services.AddHttpClient<IUserApiClient, UserApiClient>()
-    .AddStandardResilienceHandler(options =>
-    {
-        options.Retry.MaxRetryAttempts = 3;
-        options.Retry.BackoffType = DelayBackoffType.Exponential;
-        options.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(10);
-        options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(5);
-    });
-```
-
-Write tests that:
-
-1. Retry pipeline retries 3 times on transient failures (500, 502, 503)
-2. Circuit breaker opens after consecutive failures within sampling duration
-3. Circuit breaker rejects requests while open
-4. Attempt timeout cancels requests after configured duration
-
-**Example — Setting Up Resilience Tests with DI and WireMock**
-
-```csharp
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Http.Resilience;
-using Polly;
-
-public class ResilienceTests : IAsyncLifetime
-{
-    private WireMockServer _server = null!;
-    private IUserApiClient _client = null!;
-    private ServiceProvider _serviceProvider = null!;
-
-    public Task InitializeAsync()
-    {
-        _server = WireMockServer.Start();
-
-        var services = new ServiceCollection();
-        services.AddHttpClient<IUserApiClient, UserApiClient>(client =>
-        {
-            client.BaseAddress = new Uri(_server.Url!);
-        })
-        .AddStandardResilienceHandler(options =>
-        {
-            options.Retry.MaxRetryAttempts = 3;
-            options.Retry.BackoffType = DelayBackoffType.Constant;
-            options.Retry.Delay = TimeSpan.FromMilliseconds(100);
-            options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(2);
-            options.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(5);
-            options.CircuitBreaker.FailureRatioThreshold = 0.5;
-            options.CircuitBreaker.MinimumThroughput = 2;
-            options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(30);
-        });
-
-        _serviceProvider = services.BuildServiceProvider();
-        _client = _serviceProvider.GetRequiredService<IUserApiClient>();
-
-        return Task.CompletedTask;
-    }
-
-    public Task DisposeAsync()
-    {
-        _serviceProvider.Dispose();
-        _server.Stop();
-        _server.Dispose();
-        return Task.CompletedTask;
-    }
-
-    [Fact]
-    public async Task RetryPipeline_Retries3Times_OnTransientFailureAsync()
-    {
-        // Arrange: respond 500 three times, then 200
-        var callCount = 0;
-        _server
-            .Given(Request.Create().WithPath("/users/1").UsingGet())
-            .RespondWith(Response.Create()
-                .WithCallback(request =>
-                {
-                    callCount++;
-                    if (callCount <= 3)
-                        return new WireMock.ResponseMessage
-                        {
-                            StatusCode = 500
-                        };
-
-                    return new WireMock.ResponseMessage
-                    {
-                        StatusCode = 200,
-                        Headers = new Dictionary<string, WireMock.Types.WireMockList<string>>
-                        {
-                            ["Content-Type"] = new(["application/json"])
-                        },
-                        BodyData = new WireMock.Types.BodyData
-                        {
-                            BodyAsString = JsonSerializer.Serialize(
-                                new { Id = 1, Name = "Alice", Email = "a@b.com" })
-                        }
-                    };
-                })
-            );
-
-        // Act
-        var user = await _client.GetUserAsync(1);
-
-        // Assert
-        user.ShouldNotBeNull();
-        _server.LogEntries.Count().ShouldBe(4); // 3 retries + 1 success
-    }
-}
-```
-
-**Expected Resilience Behavior**
-
-| Scenario | Expected Outcome |
-|----------|-----------------|
-| Single 500 response, then 200 | Retry succeeds on second attempt; client returns valid user |
-| Three consecutive 500 responses, then 200 | Retry succeeds on fourth attempt (3 retries + 1 original) |
-| All requests return 500 | Retries exhausted; `ApiException` or `HttpRequestException` thrown |
-| Circuit breaker open | Immediate rejection with `BrokenCircuitException` without sending an HTTP request |
-| Response takes 10 s, timeout is 2 s | `TaskCanceledException` thrown after ~2 s |
-
-**Minimum test count for Task 3**: 4 tests (one per scenario listed above).
-
-> **Hint**: For testing the circuit breaker, you need to trigger enough failures within the `SamplingDuration` window to exceed `FailureRatioThreshold`. Use short durations (e.g., 5 seconds) and low thresholds (e.g., `MinimumThroughput = 2`) in test configuration to avoid long-running tests.
-
-> **Hint**: Use `DelayBackoffType.Constant` with a short delay (100 ms) in tests instead of `Exponential`. Exponential backoff makes tests slow and unpredictable.
 
 ## Grading
 
@@ -483,7 +360,6 @@ public class ResilienceTests : IAsyncLifetime
 |----------|
 | Task 1 — API client implementation |
 | Task 2 — WireMock tests |
-| Task 3 — Resilience handler tests |
 | Proper exception hierarchy |
 | WireMock server cleanup (IDisposable) |
 

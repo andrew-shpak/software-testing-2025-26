@@ -4,6 +4,8 @@
 
 Learn to write microbenchmarks for C# code, profile memory allocations, and identify performance hotspots using BenchmarkDotNet.
 
+**Duration:** 60 minutes
+
 ## Prerequisites
 
 - .NET 10 SDK or later installed
@@ -58,8 +60,6 @@ Create benchmark classes that compare:
 
 1. **String concatenation**: `string +=` vs `StringBuilder` vs `string.Join` vs `string.Concat` for 100, 1000, and 10000 iterations
 2. **Collection lookup**: `List<T>.Contains` vs `HashSet<T>.Contains` vs `Dictionary<TKey,TValue>.ContainsKey` for 1000 and 100000 elements
-3. **Serialization**: `System.Text.Json` vs `Newtonsoft.Json` for a complex nested object
-4. **LINQ vs loops**: `Where().Select().ToList()` vs manual `foreach` with conditions
 
 Each benchmark must:
 
@@ -146,7 +146,7 @@ dotnet run -c Release --project Lab8.Benchmarks -- --filter "*StringConcatenatio
 | `HashSet<T>.Contains` | Fast | Fast | O(1) amortized |
 | `Dictionary.ContainsKey` | Fast | Fast | O(1) amortized |
 
-**Minimum test count for Task 1**: 4 benchmark classes (one per comparison).
+**Minimum test count for Task 1**: 2 benchmark classes (one per comparison).
 
 > **Hint**: Use `BenchmarkSwitcher` in your `Program.cs` so you can run individual benchmarks with `--filter`. Running all benchmarks at once can take over an hour.
 
@@ -156,8 +156,6 @@ Write code that demonstrates and benchmarks:
 
 1. `Span<T>` vs `Array` slicing — measure zero-copy vs allocation
 2. `struct` vs `class` for small data objects — compare GC pressure
-3. Object pooling with `ObjectPool<T>` vs creating new instances
-4. `ValueTask<T>` vs `Task<T>` for sync-completing async methods
 
 For each comparison, document:
 
@@ -248,14 +246,8 @@ public class StructVsClassBenchmarks
 |------------|-----------------|----------------|--------|
 | `Span<T>` slice vs `Array.Copy` | 0 B vs ~128 B | 0 vs Gen0 | `Span<T>` |
 | `struct` vs `class` (small data) | 0 B vs 24+ B per instance | 0 vs Gen0 | `struct` |
-| `ObjectPool<T>` vs `new` | Amortized ~0 B vs full allocation | Reduced | `ObjectPool<T>` at scale |
-| `ValueTask<T>` vs `Task<T>` (sync path) | 0 B vs ~72 B | 0 vs Gen0 | `ValueTask<T>` |
 
-**Minimum test count for Task 2**: 4 benchmark classes (one per comparison).
-
-> **Hint**: For `ObjectPool<T>`, use `Microsoft.Extensions.ObjectPool`. Install it via `dotnet add Lab8.Benchmarks package Microsoft.Extensions.ObjectPool`.
-
-> **Hint**: For `ValueTask<T>` vs `Task<T>`, create an async method that completes synchronously (e.g., returns a cached value). The `Task<T>` version will still allocate a `Task` object on the heap, while `ValueTask<T>` will not.
+**Minimum test count for Task 2**: 2 benchmark classes (one per comparison).
 
 ### Task 3 — Performance Regression Tests
 

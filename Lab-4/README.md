@@ -4,6 +4,8 @@
 
 Test full API request/response cycles including routing, model binding, validation, serialization, content negotiation, and HTTP status codes.
 
+**Duration:** 60 minutes
+
 ## Prerequisites
 
 Before starting this lab, make sure you have:
@@ -88,8 +90,9 @@ Write integration tests covering:
 3. Invalid status values are rejected
 4. Query filtering by status works correctly
 5. Creating a task with past `DueDate` returns validation error
+6. Edge cases: non-existing resource returns 404 with structured error, empty body returns 400
 
-**Minimum test count: 12 tests**
+**Minimum test count: 8 tests**
 
 #### Example: CRUD Test with Shouldly
 
@@ -248,7 +251,7 @@ Write tests that verify:
 4. Response includes correct `Content-Type` header
 5. Invalid JSON in request body returns 400
 
-**Minimum test count: 5 tests**
+**Minimum test count: 4 tests**
 
 #### Example: Serialization Test with Shouldly
 
@@ -302,88 +305,19 @@ public async Task InvalidJson_Returns400Async()
 
 > **Hint:** To test null-field exclusion, configure `JsonSerializerOptions` in `Program.cs` with `DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull` and verify the JSON body does not contain the null property key.
 
-### Task 3 — Error Handling
-
-Write tests for edge cases:
-
-1. `GET /api/tasks/999` returns 404 with a structured error body
-2. `DELETE /api/tasks/999` on non-existing resource returns 404
-3. Sending request to non-existing endpoint returns 404
-4. `POST /api/tasks` with empty body returns 400
-
-**Minimum test count: 4 tests**
-
-#### Example: Error Handling Test with Shouldly
-
-```csharp
-[Fact]
-public async Task GetTask_NonExisting_Returns404WithStructuredBodyAsync()
-{
-    // Act
-    var response = await _client.GetAsync("/api/tasks/999");
-
-    // Assert
-    response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
-    var body = await response.Content.ReadAsStringAsync();
-    body.ShouldNotBeNullOrWhiteSpace();
-
-    // Verify the error body is structured JSON (not a plain text error page)
-    var json = JsonDocument.Parse(body);
-    json.RootElement.TryGetProperty("title", out _).ShouldBeTrue();
-}
-
-[Fact]
-public async Task PostTask_EmptyBody_Returns400Async()
-{
-    // Arrange
-    var content = new StringContent(
-        "",
-        System.Text.Encoding.UTF8,
-        "application/json");
-
-    // Act
-    var response = await _client.PostAsync("/api/tasks", content);
-
-    // Assert
-    response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
-}
-
-[Fact]
-public async Task NonExistingEndpoint_Returns404Async()
-{
-    // Act
-    var response = await _client.GetAsync("/api/nonexistent");
-
-    // Assert
-    response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
-}
-```
-
-#### Expected Behavior Table — Error Responses
-
-| Scenario | Expected Status | Expected Body |
-|---|---|---|
-| `GET /api/tasks/999` | 404 Not Found | JSON with `title` and/or `detail` |
-| `DELETE /api/tasks/999` | 404 Not Found | JSON with `title` and/or `detail` |
-| `GET /api/nonexistent` | 404 Not Found | Default or custom 404 body |
-| `POST /api/tasks` with empty body | 400 Bad Request | Validation errors |
-| `POST /api/tasks` with malformed JSON | 400 Bad Request | Parse error details |
-
-> **Hint:** ASP.NET Core returns `ProblemDetails` or `ValidationProblemDetails` by default when configured with `builder.Services.AddProblemDetails()`. Check for `title`, `status`, and `errors` properties in the response JSON.
-
 ## Grading
 
 | Criteria |
 |----------|
 | Task 1 — CRUD + validation tests |
 | Task 2 — Serialization tests |
-| Task 3 — Error handling tests |
 | Use of helper methods / base test class |
 | All tests independent and repeatable |
 
 ## Submission
 
 - Solution with `Lab4.Api` and `Lab4.Tests` projects
+- Minimum 12 total tests
 - Demonstrate both happy-path and error-path coverage
 
 ## References

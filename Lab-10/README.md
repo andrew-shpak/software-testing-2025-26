@@ -4,6 +4,8 @@
 
 Learn contract testing for microservice communication. Ensure that service providers and consumers agree on API contracts without requiring end-to-end integration.
 
+**Duration:** 60 minutes
+
 ## Prerequisites
 
 Before starting this lab, make sure you have:
@@ -169,19 +171,15 @@ In `Lab10.Consumer.Tests`, write Pact consumer tests:
    - Request: `GET /api/orders/1` with `Accept: application/json`
    - Expected response: 200 with JSON body containing `id`, `customerEmail`, `items`, `totalAmount`, `status`
 
-2. Define expected interaction for `GET /api/orders?customerId={id}`:
-   - Request: `GET /api/orders?customerId=42`
-   - Expected response: 200 with JSON array of orders
-
-3. Define expected interaction for non-existing order:
+2. Define expected interaction for non-existing order:
    - Request: `GET /api/orders/999`
    - Expected response: 404
 
-4. Define expected interaction for `POST /api/orders`:
+3. Define expected interaction for `POST /api/orders`:
    - Request: POST with order JSON body
    - Expected response: 201 with created order
 
-5. Generate the Pact file and verify it is created in `pacts/` directory
+4. Generate the Pact file and verify it is created in `pacts/` directory
 
 #### Consumer Test Structure Example
 
@@ -315,39 +313,17 @@ app.MapPost("/provider-states", async (HttpContext context) =>
 });
 ```
 
-### Task 3 — Contract Evolution
-
-Document and test contract evolution scenarios:
-
-1. **Adding optional field**: Add `deliveryDate` to order response. Verify contract still passes (backward compatible).
-2. **Removing a field**: Remove `status` from response. Verify consumer contract breaks.
-3. **Changing field type**: Change `totalAmount` from `number` to `string`. Verify contract breaks.
-
-Write tests proving each scenario and document findings in `REPORT.md`.
-
-#### Expected Behavior for Contract Evolution
-
-| Change | Consumer Impact | Provider Verification | Backward Compatible? |
-|--------|----------------|----------------------|---------------------|
-| Add optional `deliveryDate` | Consumer ignores unknown fields | Passes (extra fields are OK) | Yes |
-| Remove `status` | Consumer expects `status` | Fails (missing required field) | No |
-| Change `totalAmount` type | Consumer parses as wrong type | Fails (type mismatch) | No |
-
-> **Hint:** The key insight is that contract tests follow **Postel's Law** (the Robustness Principle): "Be conservative in what you send, be liberal in what you accept." Adding new optional fields is safe. Removing or changing existing fields is a breaking change.
-
 ## Grading
 
 | Criteria |
 |----------|
 | Task 1 — Consumer contract tests |
 | Task 2 — Provider verification |
-| Task 3 — Contract evolution |
 
 ## Submission
 
 - Solution with all four projects
 - Generated Pact files in `pacts/` directory
-- `REPORT.md` with contract evolution analysis
 
 ## References
 

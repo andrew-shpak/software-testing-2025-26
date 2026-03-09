@@ -4,6 +4,8 @@
 
 Learn to perform load and stress testing on a web API. Identify performance bottlenecks, establish baselines, and determine system breaking points.
 
+**Duration:** 60 minutes
+
 ## Prerequisites
 
 - .NET 10 SDK or later installed
@@ -129,7 +131,6 @@ Write load test scenarios that:
 
 1. **Smoke test**: 1 virtual user, 1 minute — verify the API responds correctly under minimal load
 2. **Average load test**: 50 virtual users, 5 minutes — simulate normal traffic
-3. **Spike test**: Ramp from 10 to 200 virtual users in 30 seconds, then back to 10
 
 For each scenario, collect and report:
 
@@ -210,11 +211,10 @@ export default function () {
 |----------|-------------|---------------------|-------------|
 | Smoke (1 VU) | < 200 ms | 0 % | ~1 |
 | Average load (50 VU) | < 500 ms | < 1 % | ~40-50 |
-| Spike (200 VU) | < 2000 ms | < 5 % | varies |
 
 > These are rough targets. Actual values depend on your hardware and `Task.Delay` settings. Record your real measurements and explain deviations.
 
-**Minimum test count for Task 2**: 3 test methods/scripts (one per scenario).
+**Minimum test count for Task 2**: 2 test methods/scripts (one per scenario).
 
 > **Hint**: Always start the API in Release mode (`dotnet run -c Release`) for consistent results. Debug mode includes extra overhead that skews measurements.
 
@@ -223,13 +223,11 @@ export default function () {
 Write stress test scenarios:
 
 1. **Ramp-up stress test**: Gradually increase users from 10 to 500 over 10 minutes. Identify the breaking point where error rate exceeds 5%.
-2. **Endurance test**: 50 virtual users for 15 minutes. Monitor for memory leaks or degradation over time.
 
 Document:
 
 - At what load does the API start failing?
 - What is the maximum RPS before error rate exceeds 1%?
-- Are there any memory leaks (compare memory usage at start vs end)?
 
 **Example — NBomber Ramp-Up Stress Test**
 
@@ -260,20 +258,14 @@ var scenario = Scenario.Create("stress_ramp_up", async context =>
 | 250 RPS | < 2000 ms | 1-5 % | Degradation expected |
 | 500 RPS | > 2000 ms | > 5 % | Breaking point likely |
 
-**Minimum test count for Task 3**: 2 test methods/scripts (one ramp-up, one endurance).
-
-> **Hint**: For the endurance test, capture memory usage at the start and end using `GC.GetTotalMemory(true)` or `dotnet-counters`. If memory grows monotonically over 15 minutes, that is a leak.
+**Minimum test count for Task 3**: 1 test method/script (ramp-up stress test).
 
 ### Task 4 — Results Report
 
 Create a `REPORT.md` with:
 
-1. Test environment description (hardware, OS, .NET version)
-2. Summary table of all test results
-3. Charts/graphs of response times over duration (k6 or NBomber generates these)
-4. Identified bottlenecks and recommended optimizations
-
-> **Hint**: NBomber generates HTML reports automatically in the `reports/` directory after each run. k6 can output to JSON or InfluxDB for visualization. Include screenshots or links to these artifacts in your report.
+1. Summary table of all test results
+2. Identified bottlenecks and recommended optimizations
 
 ## Grading
 

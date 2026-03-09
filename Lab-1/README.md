@@ -4,6 +4,8 @@
 
 Learn the basics of unit testing in C#: writing test cases with xUnit v3, using assertions, structuring tests with the Arrange-Act-Assert (AAA) pattern, and achieving meaningful code coverage.
 
+**Duration:** 60 minutes
+
 ## Prerequisites
 
 - .NET 10+ SDK installed
@@ -99,7 +101,7 @@ public class CalculatorTests
 }
 ```
 
-**Minimum test count:** 12 tests (3 per operation)
+**Minimum test count:** 8 tests (2 per operation)
 
 ### Task 2 — String Utilities
 
@@ -131,34 +133,7 @@ Write tests covering:
 
 **Hint:** Use `[Theory]` with `[InlineData]` for table-driven tests.
 
-**Minimum test count:** 16 tests (4 per method)
-
-### Task 3 — Collection Processor
-
-Create a `CollectionProcessor<T>` class with methods:
-
-- `IEnumerable<T> RemoveDuplicates(IEnumerable<T> items)`
-- `IEnumerable<IEnumerable<T>> Chunk(IEnumerable<T> items, int size)`
-- `IDictionary<TKey, List<T>> GroupBy<TKey>(IEnumerable<T> items, Func<T, TKey> keySelector)`
-
-Write tests covering:
-
-1. Normal cases with various types (`int`, `string`)
-2. Empty collections
-3. Single element collections
-4. Invalid inputs (`null` collection, chunk size ≤ 0) throw `ArgumentException`
-
-**Expected behaviors:**
-
-| Method | Input | Expected Output |
-|--------|-------|-----------------|
-| `RemoveDuplicates` | `[1, 2, 2, 3, 3, 3]` | `[1, 2, 3]` |
-| `Chunk` | `[1, 2, 3, 4, 5], 2` | `[[1,2], [3,4], [5]]` |
-| `GroupBy` | `[{Name:"A", Age:20}, {Name:"B", Age:20}]`, key=Age | `{20: [A, B]}` |
-
-**Hint:** Use `[MemberData]` for complex test data that cannot be expressed as `[InlineData]`.
-
-**Minimum test count:** 12 tests (4 per method)
+**Minimum test count:** 12 tests (3 per method)
 
 ## Grading
 
@@ -166,15 +141,14 @@ Write tests covering:
 |----------|
 | Task 1 — Calculator tests |
 | Task 2 — String utility tests |
-| Task 3 — Collection processor tests |
 | Test quality (AAA pattern, descriptive names, `[Theory]` usage) |
-| Code coverage ≥ 90% |
+| Code coverage ≥ 80% |
 
 ## Submission
 
 - Solution with `Lab1.Core` and `Lab1.Tests` projects
 - Run `dotnet test --collect:"XPlat Code Coverage"` and include coverage report
-- Minimum 40 total tests across all tasks
+- Minimum 20 total tests across all tasks
 
 ## References
 
