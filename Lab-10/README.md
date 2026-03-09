@@ -8,7 +8,7 @@ Learn contract testing for microservice communication. Ensure that service provi
 
 Before starting this lab, make sure you have:
 
-- .NET 8 SDK (or later) installed
+- .NET 10 SDK (or later) installed
 - A working understanding of REST APIs and HTTP methods
 - Familiarity with xUnit test structure (from previous labs)
 - Basic knowledge of JSON serialization/deserialization in C#

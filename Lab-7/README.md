@@ -6,7 +6,7 @@ Learn to perform load and stress testing on a web API. Identify performance bott
 
 ## Prerequisites
 
-- .NET 8 SDK or later installed
+- .NET 10 SDK or later installed
 - C# fundamentals and ASP.NET Core basics
 - Understanding of HTTP methods (GET, POST) and status codes
 - For **Option A (NBomber)**: familiarity with xUnit test structure

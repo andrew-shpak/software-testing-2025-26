@@ -8,7 +8,7 @@ Test transactional behavior, data seeding, migration correctness, and repository
 
 Before starting this lab, make sure you have:
 
-- .NET 8+ SDK installed (`dotnet --version`)
+- .NET 10+ SDK installed (`dotnet --version`)
 - Docker installed and running (required for Testcontainers PostgreSQL)
 - A working understanding of database transactions, ACID properties, and EF Core `SaveChanges` behavior
 - Familiarity with EF Core migrations, seed data, and interceptors/`SaveChanges` override

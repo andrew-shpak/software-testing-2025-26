@@ -8,7 +8,7 @@ Learn to test database interactions using Entity Framework Core. Write tests for
 
 Before starting this lab, make sure you have:
 
-- .NET 8+ SDK installed (`dotnet --version`)
+- .NET 10+ SDK installed (`dotnet --version`)
 - Docker installed and running (required for Task 3 with Testcontainers)
 - A working understanding of Entity Framework Core (DbContext, DbSet, migrations, LINQ queries)
 - Familiarity with relational database concepts (foreign keys, unique constraints, cascade delete)

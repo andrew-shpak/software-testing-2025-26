@@ -1,1 +1,2137 @@
-# Lecture 4
+# Lecture 4: Database Testing with Testcontainers
+
+## Learning Objectives
+
+By the end of this lecture, students will be able to:
+
+- Explain why database testing matters and the challenges involved
+- Compare database testing approaches: EF Core InMemory, SQLite, and real containers
+- Set up and use Testcontainers for SQL Server and PostgreSQL in C#
+- Write integration tests against real database engines using xUnit v3 and Shouldly
+- Test repository patterns, migrations, queries, transactions, and concurrency
+- Apply test isolation strategies: per-test databases vs. transaction rollback
+- Manage container lifecycles with `IAsyncLifetime`
+- Optimize test performance with container reuse
+
+---
+
+## 1. Why Database Testing Matters
+
+### 1.1 Data is the Core of Most Applications
+
+Almost every non-trivial application stores and retrieves data. The database layer is where:
+
+- Business rules are enforced (constraints, triggers, stored procedures)
+- Data integrity is maintained (foreign keys, unique indexes)
+- Performance-critical operations happen (complex queries, aggregations)
+- Concurrency conflicts surface (deadlocks, lost updates)
+
+```
+┌──────────────────────────────────────────────────┐
+│              Typical Application                 │
+│                                                  │
+│   UI ──► API ──► Services ──► Repository ──► DB  │
+│                                              ▲   │
+│                                              │   │
+│                               Constraints    │   │
+│                               Indexes        │   │
+│                               Triggers       │   │
+│                               Transactions   │   │
+│                               Migrations     │   │
+│                                              │   │
+│                            Most bugs hide HERE   │
+└──────────────────────────────────────────────────┘
+```
+
+If your tests never touch a real database, you are leaving a significant portion of your application untested. Unit tests with mocked repositories verify that your service logic is correct, but they say nothing about:
+
+- Whether your LINQ queries translate to valid SQL
+- Whether your EF Core mappings are correct
+- Whether your migrations apply cleanly
+- Whether your constraints actually prevent bad data
+- Whether your queries perform well under realistic data volumes
+
+### 1.2 What Can Go Wrong Without Database Testing
+
+| Category | Example |
+|---|---|
+| Mapping errors | EF Core silently ignores a property, data is never persisted |
+| Query translation | LINQ expression works in-memory but fails when translated to SQL |
+| Migration drift | Migration script breaks on production schema |
+| Constraint violations | Unique index conflict not caught until production |
+| Transaction bugs | Partial updates leave data in inconsistent state |
+| Performance issues | N+1 query only visible against real DB with realistic data |
+| Provider-specific behavior | `LIKE` is case-sensitive in PostgreSQL but not in SQL Server |
+
+> **Discussion (5 min):** Have you ever encountered a bug that only appeared when running against a real database? What happened, and how could testing have caught it earlier?
+
+---
+
+## 2. Challenges of Database Testing
+
+### 2.1 The Three Core Challenges
+
+```
+Challenge 1: STATE                Challenge 2: ISOLATION           Challenge 3: SPEED
+──────────────────                ─────────────────────            ────────────────────
+Databases are stateful.           Tests must not affect            Starting a real DB
+Each test may leave               each other. Test A's             is slow. Running
+behind data that                  data should not leak             hundreds of tests
+affects the next test.            into Test B.                     against a DB can
+                                                                   take minutes.
+
+Solution:                         Solution:                        Solution:
+Reset state between               Separate databases,              Container reuse,
+tests or use                      transaction rollback,            parallel execution,
+transaction rollback.             or cleanup scripts.              lightweight providers.
+```
+
+### 2.2 The Testing Pyramid and Database Tests
+
+Database tests sit at the **integration test** level of the testing pyramid:
+
+```
+         /\
+        /  \          E2E Tests (few, slow, expensive)
+       /    \
+      /──────\
+     /        \       Integration Tests ◄── Database tests live here
+    /          \
+   /────────────\
+  /              \    Unit Tests (many, fast, cheap)
+ /________________\
+```
+
+They are slower than unit tests but provide higher confidence that your data layer works correctly. The goal is to have **enough** database tests to cover critical paths without making your test suite unbearably slow.
+
+### 2.3 The Fidelity Spectrum
+
+Different testing approaches trade off between speed and fidelity (how closely the test environment matches production):
+
+```
+Speed       ████████████████████████  Fast
+            ████████████████
+            ████████████
+            ████████
+Fidelity    ████████████████████████  High
+
+            ┌──────────────┐
+            │  EF Core     │  Fastest, lowest fidelity
+            │  InMemory    │  No SQL, no constraints
+            ├──────────────┤
+            │  SQLite      │  Fast, medium fidelity
+            │  In-Memory   │  Real SQL, some limitations
+            ├──────────────┤
+            │ Testcontainers│  Slower startup, highest fidelity
+            │ (Real DB)     │  Identical to production
+            └──────────────┘
+```
+
+> **Discussion (5 min):** Given the tradeoffs above, when would you choose each approach? Is there a "one size fits all" solution?
+
+---
+
+## 3. Approach 1: EF Core InMemory Provider
+
+### 3.1 What is the InMemory Provider?
+
+The EF Core InMemory provider replaces the actual database with an in-memory data store. It implements `IQueryable` directly in .NET without translating to SQL.
+
+```bash
+dotnet add package Microsoft.EntityFrameworkCore.InMemory
+```
+
+### 3.2 Setup and Usage
+
+```csharp
+// Domain model
+public class Product
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public decimal Price { get; set; }
+    public int StockQuantity { get; set; }
+    public string Category { get; set; } = string.Empty;
+}
+
+// DbContext
+public class AppDbContext : DbContext
+{
+    public AppDbContext(DbContextOptions<AppDbContext> options)
+        : base(options) { }
+
+    public DbSet<Product> Products => Set<Product>();
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<Product>(entity =>
+        {
+            entity.HasKey(p => p.Id);
+            entity.Property(p => p.Name).HasMaxLength(200).IsRequired();
+            entity.Property(p => p.Price).HasColumnType("decimal(18,2)");
+            entity.HasIndex(p => p.Name).IsUnique();
+        });
+    }
+}
+```
+
+```csharp
+// Repository
+public class ProductRepository(AppDbContext context)
+{
+    public async Task<Product?> GetByIdAsync(int id)
+        => await context.Products.FindAsync(id);
+
+    public async Task<List<Product>> GetByCategoryAsync(string category)
+        => await context.Products
+            .Where(p => p.Category == category)
+            .OrderBy(p => p.Name)
+            .ToListAsync();
+
+    public async Task<int> AddAsync(Product product)
+    {
+        context.Products.Add(product);
+        return await context.SaveChangesAsync();
+    }
+
+    public async Task<List<Product>> GetExpensiveProductsAsync(decimal minPrice)
+        => await context.Products
+            .Where(p => p.Price >= minPrice)
+            .OrderByDescending(p => p.Price)
+            .ToListAsync();
+}
+```
+
+```csharp
+// Test with InMemory provider
+using Microsoft.EntityFrameworkCore;
+using Shouldly;
+
+public class ProductRepositoryInMemoryTests
+{
+    private static AppDbContext CreateContext(string dbName)
+    {
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseInMemoryDatabase(databaseName: dbName)
+            .Options;
+
+        return new AppDbContext(options);
+    }
+
+    [Fact]
+    public async Task AddAsync_ValidProduct_PersistsToDatabase()
+    {
+        // Arrange
+        var context = CreateContext(nameof(AddAsync_ValidProduct_PersistsToDatabase));
+        var repo = new ProductRepository(context);
+        var product = new Product
+        {
+            Name = "Widget",
+            Price = 19.99m,
+            StockQuantity = 100,
+            Category = "Electronics"
+        };
+
+        // Act
+        await repo.AddAsync(product);
+
+        // Assert
+        var saved = await context.Products.FirstOrDefaultAsync(p => p.Name == "Widget");
+        saved.ShouldNotBeNull();
+        saved.Price.ShouldBe(19.99m);
+    }
+
+    [Fact]
+    public async Task GetByCategoryAsync_MultipleProducts_ReturnsFilteredAndSorted()
+    {
+        // Arrange
+        var context = CreateContext(nameof(GetByCategoryAsync_MultipleProducts_ReturnsFilteredAndSorted));
+        context.Products.AddRange(
+            new Product { Name = "Banana", Price = 1.50m, Category = "Fruit" },
+            new Product { Name = "Apple",  Price = 2.00m, Category = "Fruit" },
+            new Product { Name = "Bread",  Price = 3.00m, Category = "Bakery" }
+        );
+        await context.SaveChangesAsync();
+
+        var repo = new ProductRepository(context);
+
+        // Act
+        var result = await repo.GetByCategoryAsync("Fruit");
+
+        // Assert
+        result.Count.ShouldBe(2);
+        result[0].Name.ShouldBe("Apple");  // sorted by name
+        result[1].Name.ShouldBe("Banana");
+    }
+}
+```
+
+### 3.3 Limitations of the InMemory Provider
+
+The InMemory provider has significant limitations that make it unsuitable for many testing scenarios:
+
+| Limitation | Impact |
+|---|---|
+| No SQL translation | LINQ is executed in .NET, not translated to SQL. A query that compiles in C# may fail in production. |
+| No referential integrity | Foreign key constraints are not enforced. You can insert orphan records. |
+| No unique constraints | `HasIndex().IsUnique()` is ignored. Duplicate data is silently accepted. |
+| No transactions | `BeginTransaction()` is a no-op. Transaction rollback behavior cannot be tested. |
+| No raw SQL support | `FromSqlRaw()` / `ExecuteSqlRaw()` throw exceptions. |
+| No provider-specific features | No JSON columns, spatial types, full-text search, etc. |
+| Case sensitivity | String comparisons behave differently than in SQL Server or PostgreSQL. |
+
+```csharp
+// This test PASSES with InMemory but FAILS against a real database
+[Fact]
+public async Task AddAsync_DuplicateName_ShouldViolateUniqueConstraint()
+{
+    var context = CreateContext("DuplicateTest");
+    var repo = new ProductRepository(context);
+
+    await repo.AddAsync(new Product { Name = "Widget", Price = 10m, Category = "A" });
+
+    // InMemory does NOT enforce the unique index on Name!
+    // This succeeds with InMemory but would throw DbUpdateException on a real DB
+    await repo.AddAsync(new Product { Name = "Widget", Price = 20m, Category = "B" });
+
+    var count = await context.Products.CountAsync(p => p.Name == "Widget");
+    count.ShouldBe(2); // 2 duplicates exist — constraint not enforced!
+}
+```
+
+### 3.4 When to Use InMemory
+
+| Use Case | Recommendation |
+|---|---|
+| Quick prototyping and learning | Acceptable |
+| Testing pure LINQ logic (no SQL specifics) | Acceptable with caution |
+| Testing repository patterns (basic CRUD) | Acceptable if you understand limitations |
+| Testing query translation correctness | **Use a real database** |
+| Testing constraints and data integrity | **Use a real database** |
+| Testing migrations | **Use a real database** |
+| Testing transactions | **Use a real database** |
+
+> **Note:** The EF Core team explicitly recommends against using InMemory for testing. From the [official documentation](https://learn.microsoft.com/en-us/ef/core/testing/): *"The in-memory database frequently behaves differently than relational databases. Only use the in-memory database if you understand the issues and tradeoffs involved."*
+
+---
+
+## 4. Approach 2: SQLite In-Memory
+
+### 4.1 Why SQLite?
+
+SQLite is a real relational database engine. When used in in-memory mode, it provides:
+
+- Real SQL execution (not just .NET LINQ evaluation)
+- Foreign key enforcement (when enabled)
+- Unique constraint enforcement
+- Transaction support
+- Fast startup (no container needed)
+
+```bash
+dotnet add package Microsoft.EntityFrameworkCore.Sqlite
+```
+
+### 4.2 Setup
+
+The key trick with SQLite in-memory: the database exists only as long as the connection is open. You must keep the connection open for the duration of the test.
+
+```csharp
+using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
+using Shouldly;
+
+public class ProductRepositorySqliteTests : IDisposable
+{
+    private readonly SqliteConnection _connection;
+    private readonly AppDbContext _context;
+    private readonly ProductRepository _repo;
+
+    public ProductRepositorySqliteTests()
+    {
+        // Create and open a persistent in-memory connection
+        _connection = new SqliteConnection("DataSource=:memory:");
+        _connection.Open();
+
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseSqlite(_connection)
+            .Options;
+
+        _context = new AppDbContext(options);
+        _context.Database.EnsureCreated(); // Creates schema from model
+        _repo = new ProductRepository(_context);
+    }
+
+    public void Dispose()
+    {
+        _context.Dispose();
+        _connection.Dispose();
+    }
+
+    [Fact]
+    public async Task AddAsync_DuplicateName_ThrowsDbUpdateException()
+    {
+        // Arrange
+        await _repo.AddAsync(new Product
+        {
+            Name = "Widget", Price = 10m, Category = "A"
+        });
+
+        // Act & Assert — SQLite DOES enforce unique constraints!
+        var duplicate = new Product
+        {
+            Name = "Widget", Price = 20m, Category = "B"
+        };
+
+        await Should.ThrowAsync<DbUpdateException>(
+            () => _repo.AddAsync(duplicate));
+    }
+
+    [Fact]
+    public async Task GetExpensiveProductsAsync_ReturnsFilteredAndSorted()
+    {
+        // Arrange
+        _context.Products.AddRange(
+            new Product { Name = "Cheap",  Price = 5m,    Category = "A" },
+            new Product { Name = "Mid",    Price = 50m,   Category = "A" },
+            new Product { Name = "Pricy",  Price = 200m,  Category = "B" },
+            new Product { Name = "Luxury", Price = 500m,  Category = "B" }
+        );
+        await _context.SaveChangesAsync();
+
+        // Act
+        var result = await _repo.GetExpensiveProductsAsync(50m);
+
+        // Assert
+        result.Count.ShouldBe(3);
+        result[0].Name.ShouldBe("Luxury"); // ordered by price desc
+        result[1].Name.ShouldBe("Pricy");
+        result[2].Name.ShouldBe("Mid");
+    }
+}
+```
+
+### 4.3 Limitations of SQLite
+
+SQLite is better than InMemory, but it is still not your production database:
+
+| Limitation | Impact |
+|---|---|
+| Different SQL dialect | `GETDATE()`, `NEWID()`, `TOP`, `IDENTITY` do not exist in SQLite |
+| No stored procedures | Cannot test stored procedures or DB functions |
+| Limited type system | No `decimal` precision — stored as `REAL` (floating point) |
+| No `ALTER COLUMN` | EF Core migrations using `AlterColumn` may fail |
+| No concurrent connections | In-memory mode uses a single connection |
+| Missing features | No computed columns, no JSON functions (varies by version) |
+| Different collation | String comparison and sorting may differ from production |
+
+```
+Comparison:   InMemory         SQLite           Real DB
+              ────────         ──────           ───────
+SQL?          No               Yes (subset)     Yes (full)
+Constraints?  No               Yes              Yes
+Transactions? No               Yes              Yes
+Migrations?   No               Partial          Yes
+SQL dialect?  N/A              SQLite           Production dialect
+Speed?        Fastest          Fast             Slower (startup)
+Fidelity?     Low              Medium           High
+```
+
+> **Discussion (5 min):** Given the limitations of SQLite, what kind of bugs could still slip through tests that pass on SQLite but fail on SQL Server or PostgreSQL?
+
+---
+
+## 5. Approach 3: Testcontainers (Real Database Containers)
+
+### 5.1 What are Testcontainers?
+
+Testcontainers is a library that provides lightweight, throwaway instances of databases (and other services) running in Docker containers. Your tests spin up a real SQL Server, PostgreSQL, MySQL, or any other dockerized service, run the tests against it, and tear it down afterward.
+
+```
+┌──────────────────────────────────────────────────────────┐
+│  Test Process                                            │
+│                                                          │
+│   Test Code                                              │
+│      │                                                   │
+│      ▼                                                   │
+│   Testcontainers Library                                 │
+│      │                                                   │
+│      │  1. Pulls Docker image (if not cached)            │
+│      │  2. Starts container with random port             │
+│      │  3. Waits until container is healthy              │
+│      │  4. Returns connection string                     │
+│      ▼                                                   │
+│   ┌───────────────────────────┐                          │
+│   │  Docker Container         │                          │
+│   │  ┌─────────────────────┐  │                          │
+│   │  │  SQL Server /       │  │                          │
+│   │  │  PostgreSQL /       │  │                          │
+│   │  │  MySQL / ...        │  │  ◄── Real database!      │
+│   │  └─────────────────────┘  │                          │
+│   └───────────────────────────┘                          │
+│      │                                                   │
+│      │  5. Tests run against real DB                     │
+│      │  6. Container is stopped and removed              │
+│      ▼                                                   │
+│   Test Results                                           │
+└──────────────────────────────────────────────────────────┘
+```
+
+### 5.2 Why Testcontainers?
+
+| Benefit | Description |
+|---|---|
+| **Production parity** | Tests run against the exact same database engine as production |
+| **No shared state** | Each test run gets a fresh container — no stale data |
+| **No installation required** | Developers do not need to install SQL Server or PostgreSQL locally |
+| **Reproducible** | Same container image = same behavior on every machine and in CI |
+| **Isolated** | Each test class (or test) can have its own container |
+| **Automatic cleanup** | Containers are removed when tests finish |
+
+### 5.3 Prerequisites
+
+Testcontainers requires Docker to be installed and running:
+
+```bash
+# Verify Docker is available
+docker --version
+# Docker version 24.x.x or later
+
+# Verify Docker daemon is running
+docker info
+```
+
+### 5.4 How Testcontainers Works Under the Hood
+
+1. **Image Pull** — Downloads the Docker image if not already cached locally
+2. **Container Start** — Creates and starts a container with a random available port
+3. **Health Check** — Waits until the database inside the container is ready to accept connections
+4. **Connection String** — Exposes the dynamically allocated host port so your tests can connect
+5. **Test Execution** — Your code connects to the container as if it were any database server
+6. **Cleanup** — After tests complete, the container is stopped and removed
+
+```
+Timeline:
+
+  Pull Image    Start Container    Wait for Ready    Run Tests    Stop & Remove
+  (cached?)     (random port)      (health check)                 (cleanup)
+      │               │                  │               │              │
+      ▼               ▼                  ▼               ▼              ▼
+  ════════════════════════════════════════════════════════════════════════
+  │  ~0s if cached  │   ~2-10s         │   ~1-5s       │  test time   │ ~1s
+  │  ~30s first time│                  │               │              │
+  ════════════════════════════════════════════════════════════════════════
+```
+
+---
+
+## 6. Setting Up Testcontainers in C#
+
+### 6.1 NuGet Packages
+
+```bash
+# For SQL Server
+dotnet add package Testcontainers.MsSql
+
+# For PostgreSQL
+dotnet add package Testcontainers.PostgreSql
+
+# EF Core providers
+dotnet add package Microsoft.EntityFrameworkCore.SqlServer
+# or
+dotnet add package Npgsql.EntityFrameworkCore.PostgreSQL
+
+# Test framework
+dotnet add package xunit.v3
+dotnet add package Shouldly
+```
+
+### 6.2 SQL Server Container Setup
+
+```csharp
+using Testcontainers.MsSql;
+using Microsoft.EntityFrameworkCore;
+using Shouldly;
+
+public class SqlServerContainerTests : IAsyncLifetime
+{
+    private readonly MsSqlContainer _container = new MsSqlBuilder()
+        .WithImage("mcr.microsoft.com/mssql/server:2022-latest")
+        .Build();
+
+    private AppDbContext _context = null!;
+
+    public async Task InitializeAsync()
+    {
+        // Start the container (pulls image if needed, starts SQL Server)
+        await _container.StartAsync();
+
+        // Configure EF Core to use the container's connection string
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseSqlServer(_container.GetConnectionString())
+            .Options;
+
+        _context = new AppDbContext(options);
+        await _context.Database.EnsureCreatedAsync();
+    }
+
+    public async Task DisposeAsync()
+    {
+        await _context.DisposeAsync();
+        await _container.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task AddProduct_ValidData_PersistsToSqlServer()
+    {
+        // Arrange
+        var repo = new ProductRepository(_context);
+        var product = new Product
+        {
+            Name = "Gadget",
+            Price = 49.99m,
+            StockQuantity = 50,
+            Category = "Electronics"
+        };
+
+        // Act
+        await repo.AddAsync(product);
+
+        // Assert — query directly to verify
+        var saved = await _context.Products.FirstAsync(p => p.Name == "Gadget");
+        saved.Price.ShouldBe(49.99m);
+        saved.StockQuantity.ShouldBe(50);
+    }
+
+    [Fact]
+    public async Task AddProduct_DuplicateName_ThrowsDbUpdateException()
+    {
+        // Arrange
+        var repo = new ProductRepository(_context);
+        await repo.AddAsync(new Product
+        {
+            Name = "Unique-Item", Price = 10m, Category = "A"
+        });
+
+        // Act & Assert — unique constraint is enforced on real SQL Server
+        var duplicate = new Product
+        {
+            Name = "Unique-Item", Price = 20m, Category = "B"
+        };
+
+        await Should.ThrowAsync<DbUpdateException>(
+            () => repo.AddAsync(duplicate));
+    }
+}
+```
+
+### 6.3 PostgreSQL Container Setup
+
+```csharp
+using Testcontainers.PostgreSql;
+using Microsoft.EntityFrameworkCore;
+using Shouldly;
+
+public class PostgreSqlContainerTests : IAsyncLifetime
+{
+    private readonly PostgreSqlContainer _container = new PostgreSqlBuilder()
+        .WithImage("postgres:16-alpine")
+        .Build();
+
+    private AppDbContext _context = null!;
+
+    public async Task InitializeAsync()
+    {
+        await _container.StartAsync();
+
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseNpgsql(_container.GetConnectionString())
+            .Options;
+
+        _context = new AppDbContext(options);
+        await _context.Database.EnsureCreatedAsync();
+    }
+
+    public async Task DisposeAsync()
+    {
+        await _context.DisposeAsync();
+        await _container.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task GetByCategoryAsync_PostgreSql_ReturnsSortedResults()
+    {
+        // Arrange
+        _context.Products.AddRange(
+            new Product { Name = "Cherry", Price = 3m, Category = "Fruit" },
+            new Product { Name = "Apple",  Price = 2m, Category = "Fruit" },
+            new Product { Name = "Bread",  Price = 4m, Category = "Bakery" }
+        );
+        await _context.SaveChangesAsync();
+
+        var repo = new ProductRepository(_context);
+
+        // Act
+        var fruits = await repo.GetByCategoryAsync("Fruit");
+
+        // Assert — this runs against real PostgreSQL!
+        fruits.Count.ShouldBe(2);
+        fruits[0].Name.ShouldBe("Apple");
+        fruits[1].Name.ShouldBe("Cherry");
+    }
+}
+```
+
+### 6.4 Container Builder Configuration
+
+Both `MsSqlBuilder` and `PostgreSqlBuilder` support additional configuration:
+
+```csharp
+// SQL Server with custom configuration
+var mssqlContainer = new MsSqlBuilder()
+    .WithImage("mcr.microsoft.com/mssql/server:2022-latest")
+    .WithPassword("YourStrong!Passw0rd")    // custom SA password
+    .WithEnvironment("ACCEPT_EULA", "Y")     // required for SQL Server
+    .WithWaitStrategy(Wait.ForUnixContainer()
+        .UntilPortIsAvailable(1433))
+    .Build();
+
+// PostgreSQL with custom configuration
+var pgContainer = new PostgreSqlBuilder()
+    .WithImage("postgres:16-alpine")
+    .WithDatabase("testdb")                   // custom database name
+    .WithUsername("testuser")                  // custom username
+    .WithPassword("testpass")                  // custom password
+    .Build();
+```
+
+---
+
+## 7. Understanding IAsyncLifetime
+
+### 7.1 Why IAsyncLifetime?
+
+Containers take time to start. xUnit v3 provides `IAsyncLifetime` for async setup and teardown, which is essential for managing container lifecycles:
+
+```csharp
+public interface IAsyncLifetime
+{
+    Task InitializeAsync();   // Called before each test class
+    Task DisposeAsync();      // Called after all tests in the class complete
+}
+```
+
+```
+Container Lifecycle with IAsyncLifetime:
+
+  ┌──────────────────────────────────────────────────┐
+  │  InitializeAsync()                               │
+  │  ├─ Start container                              │
+  │  ├─ Wait for health check                        │
+  │  ├─ Create DbContext                             │
+  │  └─ Create/migrate schema                        │
+  ├──────────────────────────────────────────────────┤
+  │  Test 1 runs                                     │
+  ├──────────────────────────────────────────────────┤
+  │  (new class instance created)                    │
+  │  InitializeAsync() again                         │
+  ├──────────────────────────────────────────────────┤
+  │  Test 2 runs                                     │
+  ├──────────────────────────────────────────────────┤
+  │  DisposeAsync()                                  │
+  │  ├─ Dispose DbContext                            │
+  │  └─ Stop and remove container                    │
+  └──────────────────────────────────────────────────┘
+```
+
+> **Important:** In xUnit v3, each test method gets a new class instance. If `IAsyncLifetime` is on the test class, `InitializeAsync` and `DisposeAsync` run for **every test**. This means a new container per test unless you use a fixture (covered in Section 11).
+
+### 7.2 Class Fixture for Shared Containers
+
+To share a single container across all tests in a class, use `IClassFixture<T>`:
+
+```csharp
+// Fixture: starts container once, shared across all tests in the class
+public class PostgreSqlFixture : IAsyncLifetime
+{
+    public PostgreSqlContainer Container { get; } = new PostgreSqlBuilder()
+        .WithImage("postgres:16-alpine")
+        .Build();
+
+    public string ConnectionString => Container.GetConnectionString();
+
+    public async Task InitializeAsync()
+    {
+        await Container.StartAsync();
+    }
+
+    public async Task DisposeAsync()
+    {
+        await Container.DisposeAsync();
+    }
+}
+
+// Tests: use the shared fixture
+public class ProductRepositoryTests(PostgreSqlFixture fixture)
+    : IClassFixture<PostgreSqlFixture>, IAsyncLifetime
+{
+    private AppDbContext _context = null!;
+    private ProductRepository _repo = null!;
+
+    public async Task InitializeAsync()
+    {
+        // Each test gets a fresh DbContext, but shares the container
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseNpgsql(fixture.ConnectionString)
+            .Options;
+
+        _context = new AppDbContext(options);
+        await _context.Database.EnsureCreatedAsync();
+
+        // Clean data between tests
+        _context.Products.RemoveRange(_context.Products);
+        await _context.SaveChangesAsync();
+
+        _repo = new ProductRepository(_context);
+    }
+
+    public async Task DisposeAsync()
+    {
+        await _context.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task AddAsync_ValidProduct_PersistsCorrectly()
+    {
+        // Arrange
+        var product = new Product
+        {
+            Name = "Test Product",
+            Price = 25.99m,
+            StockQuantity = 10,
+            Category = "Testing"
+        };
+
+        // Act
+        await _repo.AddAsync(product);
+
+        // Assert
+        var saved = await _context.Products.FirstAsync();
+        saved.Name.ShouldBe("Test Product");
+        saved.Price.ShouldBe(25.99m);
+    }
+
+    [Fact]
+    public async Task GetByIdAsync_NonExistentId_ReturnsNull()
+    {
+        // Act
+        var result = await _repo.GetByIdAsync(999);
+
+        // Assert
+        result.ShouldBeNull();
+    }
+}
+```
+
+---
+
+## 8. Testing Repository Patterns with EF Core
+
+### 8.1 A Realistic Repository
+
+Let us define a more complete repository to test:
+
+```csharp
+// Domain models
+public class Order
+{
+    public int Id { get; set; }
+    public string CustomerEmail { get; set; } = string.Empty;
+    public DateTime CreatedAt { get; set; }
+    public OrderStatus Status { get; set; }
+    public List<OrderItem> Items { get; set; } = [];
+    public decimal TotalAmount => Items.Sum(i => i.Quantity * i.UnitPrice);
+}
+
+public class OrderItem
+{
+    public int Id { get; set; }
+    public int OrderId { get; set; }
+    public Order Order { get; set; } = null!;
+    public string ProductName { get; set; } = string.Empty;
+    public int Quantity { get; set; }
+    public decimal UnitPrice { get; set; }
+}
+
+public enum OrderStatus { Pending, Confirmed, Shipped, Delivered, Cancelled }
+```
+
+```csharp
+// DbContext with relationships
+public class OrderDbContext : DbContext
+{
+    public OrderDbContext(DbContextOptions<OrderDbContext> options)
+        : base(options) { }
+
+    public DbSet<Order> Orders => Set<Order>();
+    public DbSet<OrderItem> OrderItems => Set<OrderItem>();
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<Order>(entity =>
+        {
+            entity.HasKey(o => o.Id);
+            entity.Property(o => o.CustomerEmail).HasMaxLength(256).IsRequired();
+            entity.Property(o => o.Status)
+                .HasConversion<string>()
+                .HasMaxLength(50);
+            entity.HasIndex(o => o.CustomerEmail);
+            entity.HasIndex(o => o.CreatedAt);
+            entity.Ignore(o => o.TotalAmount); // Computed in .NET
+        });
+
+        modelBuilder.Entity<OrderItem>(entity =>
+        {
+            entity.HasKey(oi => oi.Id);
+            entity.Property(oi => oi.UnitPrice).HasColumnType("decimal(18,2)");
+            entity.HasOne(oi => oi.Order)
+                .WithMany(o => o.Items)
+                .HasForeignKey(oi => oi.OrderId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+    }
+}
+```
+
+```csharp
+// Repository with various query patterns
+public class OrderRepository(OrderDbContext context)
+{
+    public async Task<Order?> GetByIdWithItemsAsync(int id)
+        => await context.Orders
+            .Include(o => o.Items)
+            .FirstOrDefaultAsync(o => o.Id == id);
+
+    public async Task<List<Order>> GetByCustomerAsync(string email)
+        => await context.Orders
+            .Include(o => o.Items)
+            .Where(o => o.CustomerEmail == email)
+            .OrderByDescending(o => o.CreatedAt)
+            .ToListAsync();
+
+    public async Task<List<Order>> GetByStatusAsync(OrderStatus status)
+        => await context.Orders
+            .Where(o => o.Status == status)
+            .ToListAsync();
+
+    public async Task<int> CreateAsync(Order order)
+    {
+        context.Orders.Add(order);
+        return await context.SaveChangesAsync();
+    }
+
+    public async Task UpdateStatusAsync(int orderId, OrderStatus newStatus)
+    {
+        var order = await context.Orders.FindAsync(orderId)
+            ?? throw new KeyNotFoundException($"Order {orderId} not found");
+
+        order.Status = newStatus;
+        await context.SaveChangesAsync();
+    }
+
+    public async Task<decimal> GetTotalRevenueAsync(DateTime from, DateTime to)
+        => await context.Orders
+            .Where(o => o.Status == OrderStatus.Delivered)
+            .Where(o => o.CreatedAt >= from && o.CreatedAt <= to)
+            .SelectMany(o => o.Items)
+            .SumAsync(i => i.Quantity * i.UnitPrice);
+
+    public async Task<Dictionary<OrderStatus, int>> GetOrderCountsByStatusAsync()
+        => await context.Orders
+            .GroupBy(o => o.Status)
+            .ToDictionaryAsync(g => g.Key, g => g.Count());
+}
+```
+
+### 8.2 Testing the Repository with Testcontainers
+
+```csharp
+using Testcontainers.PostgreSql;
+using Microsoft.EntityFrameworkCore;
+using Shouldly;
+
+public class OrderRepositoryFixture : IAsyncLifetime
+{
+    public PostgreSqlContainer Container { get; } = new PostgreSqlBuilder()
+        .WithImage("postgres:16-alpine")
+        .Build();
+
+    public string ConnectionString => Container.GetConnectionString();
+
+    public async Task InitializeAsync() => await Container.StartAsync();
+    public async Task DisposeAsync() => await Container.DisposeAsync();
+}
+
+public class OrderRepositoryTests(OrderRepositoryFixture fixture)
+    : IClassFixture<OrderRepositoryFixture>, IAsyncLifetime
+{
+    private OrderDbContext _context = null!;
+    private OrderRepository _repo = null!;
+
+    public async Task InitializeAsync()
+    {
+        var options = new DbContextOptionsBuilder<OrderDbContext>()
+            .UseNpgsql(fixture.ConnectionString)
+            .Options;
+
+        _context = new OrderDbContext(options);
+
+        // Drop and recreate for clean state
+        await _context.Database.EnsureDeletedAsync();
+        await _context.Database.EnsureCreatedAsync();
+
+        _repo = new OrderRepository(_context);
+    }
+
+    public async Task DisposeAsync()
+    {
+        await _context.DisposeAsync();
+    }
+
+    // ── Helper Methods ──────────────────────────────────────
+
+    private static Order CreateOrder(
+        string email = "alice@example.com",
+        OrderStatus status = OrderStatus.Pending,
+        DateTime? createdAt = null,
+        params (string Name, int Qty, decimal Price)[] items)
+    {
+        var order = new Order
+        {
+            CustomerEmail = email,
+            Status = status,
+            CreatedAt = createdAt ?? DateTime.UtcNow
+        };
+
+        foreach (var (name, qty, price) in items)
+        {
+            order.Items.Add(new OrderItem
+            {
+                ProductName = name,
+                Quantity = qty,
+                UnitPrice = price
+            });
+        }
+
+        return order;
+    }
+
+    // ── CRUD Tests ──────────────────────────────────────────
+
+    [Fact]
+    public async Task CreateAsync_ValidOrder_PersistsWithItems()
+    {
+        // Arrange
+        var order = CreateOrder(
+            items: [("Widget", 2, 10.00m), ("Gadget", 1, 25.50m)]);
+
+        // Act
+        await _repo.CreateAsync(order);
+
+        // Assert
+        var saved = await _repo.GetByIdWithItemsAsync(order.Id);
+        saved.ShouldNotBeNull();
+        saved.CustomerEmail.ShouldBe("alice@example.com");
+        saved.Items.Count.ShouldBe(2);
+        saved.TotalAmount.ShouldBe(45.50m); // (2*10) + (1*25.50)
+    }
+
+    [Fact]
+    public async Task GetByIdWithItemsAsync_NonExistent_ReturnsNull()
+    {
+        // Act
+        var result = await _repo.GetByIdWithItemsAsync(99999);
+
+        // Assert
+        result.ShouldBeNull();
+    }
+
+    // ── Filtering Tests ─────────────────────────────────────
+
+    [Fact]
+    public async Task GetByCustomerAsync_MultipleOrders_ReturnsNewestFirst()
+    {
+        // Arrange
+        var older = CreateOrder(
+            email: "bob@example.com",
+            createdAt: new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+            items: [("A", 1, 10m)]);
+        var newer = CreateOrder(
+            email: "bob@example.com",
+            createdAt: new DateTime(2025, 6, 15, 0, 0, 0, DateTimeKind.Utc),
+            items: [("B", 1, 20m)]);
+        var otherCustomer = CreateOrder(
+            email: "carol@example.com",
+            items: [("C", 1, 30m)]);
+
+        await _repo.CreateAsync(older);
+        await _repo.CreateAsync(newer);
+        await _repo.CreateAsync(otherCustomer);
+
+        // Act
+        var bobOrders = await _repo.GetByCustomerAsync("bob@example.com");
+
+        // Assert
+        bobOrders.Count.ShouldBe(2);
+        bobOrders[0].CreatedAt.ShouldBeGreaterThan(bobOrders[1].CreatedAt);
+    }
+
+    [Fact]
+    public async Task GetByStatusAsync_FiltersByStatus()
+    {
+        // Arrange
+        await _repo.CreateAsync(CreateOrder(
+            status: OrderStatus.Pending, items: [("A", 1, 10m)]));
+        await _repo.CreateAsync(CreateOrder(
+            status: OrderStatus.Shipped, items: [("B", 1, 20m)]));
+        await _repo.CreateAsync(CreateOrder(
+            status: OrderStatus.Shipped, items: [("C", 1, 30m)]));
+
+        // Act
+        var shipped = await _repo.GetByStatusAsync(OrderStatus.Shipped);
+
+        // Assert
+        shipped.Count.ShouldBe(2);
+        shipped.ShouldAllBe(o => o.Status == OrderStatus.Shipped);
+    }
+
+    // ── Update Tests ────────────────────────────────────────
+
+    [Fact]
+    public async Task UpdateStatusAsync_ValidOrder_ChangesStatus()
+    {
+        // Arrange
+        var order = CreateOrder(
+            status: OrderStatus.Pending, items: [("A", 1, 10m)]);
+        await _repo.CreateAsync(order);
+
+        // Act
+        await _repo.UpdateStatusAsync(order.Id, OrderStatus.Confirmed);
+
+        // Assert — use a fresh context to verify persistence
+        var updated = await _repo.GetByIdWithItemsAsync(order.Id);
+        updated.ShouldNotBeNull();
+        updated.Status.ShouldBe(OrderStatus.Confirmed);
+    }
+
+    [Fact]
+    public async Task UpdateStatusAsync_NonExistent_ThrowsKeyNotFoundException()
+    {
+        // Act & Assert
+        await Should.ThrowAsync<KeyNotFoundException>(
+            () => _repo.UpdateStatusAsync(99999, OrderStatus.Cancelled));
+    }
+
+    // ── Aggregation Tests ───────────────────────────────────
+
+    [Fact]
+    public async Task GetTotalRevenueAsync_DeliveredOrdersInRange_ReturnsSumAsync()
+    {
+        // Arrange
+        var jan = new DateTime(2025, 1, 15, 0, 0, 0, DateTimeKind.Utc);
+        var mar = new DateTime(2025, 3, 10, 0, 0, 0, DateTimeKind.Utc);
+        var jun = new DateTime(2025, 6, 20, 0, 0, 0, DateTimeKind.Utc);
+
+        // Delivered in January — in range
+        await _repo.CreateAsync(CreateOrder(
+            status: OrderStatus.Delivered, createdAt: jan,
+            items: [("A", 2, 50m)]));  // 100
+
+        // Delivered in March — in range
+        await _repo.CreateAsync(CreateOrder(
+            status: OrderStatus.Delivered, createdAt: mar,
+            items: [("B", 1, 75m)]));  // 75
+
+        // Delivered in June — out of range
+        await _repo.CreateAsync(CreateOrder(
+            status: OrderStatus.Delivered, createdAt: jun,
+            items: [("C", 1, 200m)]));
+
+        // Pending in January — not delivered
+        await _repo.CreateAsync(CreateOrder(
+            status: OrderStatus.Pending, createdAt: jan,
+            items: [("D", 1, 300m)]));
+
+        // Act
+        var from = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var to = new DateTime(2025, 4, 1, 0, 0, 0, DateTimeKind.Utc);
+        var revenue = await _repo.GetTotalRevenueAsync(from, to);
+
+        // Assert
+        revenue.ShouldBe(175m);  // 100 + 75
+    }
+
+    [Fact]
+    public async Task GetOrderCountsByStatusAsync_ReturnsCorrectCounts()
+    {
+        // Arrange
+        await _repo.CreateAsync(CreateOrder(
+            status: OrderStatus.Pending, items: [("A", 1, 10m)]));
+        await _repo.CreateAsync(CreateOrder(
+            status: OrderStatus.Pending, items: [("B", 1, 10m)]));
+        await _repo.CreateAsync(CreateOrder(
+            status: OrderStatus.Shipped, items: [("C", 1, 10m)]));
+
+        // Act
+        var counts = await _repo.GetOrderCountsByStatusAsync();
+
+        // Assert
+        counts[OrderStatus.Pending].ShouldBe(2);
+        counts[OrderStatus.Shipped].ShouldBe(1);
+        counts.ContainsKey(OrderStatus.Delivered).ShouldBeFalse();
+    }
+}
+```
+
+> **Discussion (5 min):** Looking at the test helper method `CreateOrder`, why is it useful to have factory methods for test data? What would happen if we duplicated the object creation in every test?
+
+---
+
+## 9. Testing Migrations and Schema Changes
+
+### 9.1 Why Test Migrations?
+
+EF Core migrations are code that modifies your database schema. Migrations can fail for many reasons:
+
+- Syntax errors in the migration SQL
+- Conflicts with existing data
+- Missing dependencies (foreign keys referencing non-existent tables)
+- Provider-specific incompatibilities
+
+Testing migrations against a real database engine catches these issues before they reach production.
+
+### 9.2 Testing Migration Application
+
+```csharp
+public class MigrationTests : IAsyncLifetime
+{
+    private readonly PostgreSqlContainer _container = new PostgreSqlBuilder()
+        .WithImage("postgres:16-alpine")
+        .Build();
+
+    public async Task InitializeAsync() => await _container.StartAsync();
+    public async Task DisposeAsync() => await _container.DisposeAsync();
+
+    [Fact]
+    public async Task AllMigrations_ApplyCleanly()
+    {
+        // Arrange
+        var options = new DbContextOptionsBuilder<OrderDbContext>()
+            .UseNpgsql(_container.GetConnectionString())
+            .Options;
+
+        await using var context = new OrderDbContext(options);
+
+        // Act — apply all pending migrations
+        await context.Database.MigrateAsync();
+
+        // Assert — verify migration was applied by checking tables exist
+        var canConnect = await context.Database.CanConnectAsync();
+        canConnect.ShouldBeTrue();
+
+        // Verify we can perform basic operations
+        context.Orders.Add(new Order
+        {
+            CustomerEmail = "test@test.com",
+            CreatedAt = DateTime.UtcNow,
+            Status = OrderStatus.Pending
+        });
+
+        var saved = await context.SaveChangesAsync();
+        saved.ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task Migration_CanRollForwardFromEmpty()
+    {
+        // Arrange
+        var options = new DbContextOptionsBuilder<OrderDbContext>()
+            .UseNpgsql(_container.GetConnectionString())
+            .Options;
+
+        await using var context = new OrderDbContext(options);
+
+        // Act
+        var pendingMigrations = await context.Database
+            .GetPendingMigrationsAsync();
+
+        await context.Database.MigrateAsync();
+
+        var appliedMigrations = await context.Database
+            .GetAppliedMigrationsAsync();
+
+        // Assert
+        appliedMigrations.Count().ShouldBeGreaterThan(0);
+        (await context.Database.GetPendingMigrationsAsync())
+            .ShouldBeEmpty();
+    }
+}
+```
+
+### 9.3 EnsureCreated vs. Migrate
+
+| Method | Behavior | Use For |
+|---|---|---|
+| `EnsureCreated()` | Creates schema from current model. Does not use migrations. | Quick test setup when migration history does not matter |
+| `Migrate()` | Applies pending migrations in order. Creates `__EFMigrationsHistory` table. | Testing the actual migration path |
+
+```
+EnsureCreated():
+  Empty DB ──► Full schema (from current model snapshot)
+  - Does NOT create __EFMigrationsHistory table
+  - Cannot run subsequent Migrate() calls
+  - Good for: disposable test databases
+
+Migrate():
+  Empty DB ──► Migration 1 ──► Migration 2 ──► ... ──► Current schema
+  - Creates __EFMigrationsHistory table
+  - Applies migrations in order
+  - Good for: testing the migration path itself
+```
+
+---
+
+## 10. Testing Transactions and Concurrency
+
+### 10.1 Testing Transactions
+
+Transactions are critical for data consistency. Testing them requires a real database — the InMemory provider does not support transactions.
+
+```csharp
+// Service that uses transactions
+public class OrderService(OrderDbContext context)
+{
+    public async Task TransferItemAsync(
+        int sourceOrderId, int targetOrderId, int itemId)
+    {
+        await using var transaction = await context.Database
+            .BeginTransactionAsync();
+
+        try
+        {
+            var item = await context.OrderItems
+                .FirstOrDefaultAsync(i => i.Id == itemId && i.OrderId == sourceOrderId)
+                ?? throw new KeyNotFoundException("Item not found in source order");
+
+            // Remove from source
+            item.OrderId = targetOrderId;
+
+            await context.SaveChangesAsync();
+            await transaction.CommitAsync();
+        }
+        catch
+        {
+            await transaction.RollbackAsync();
+            throw;
+        }
+    }
+}
+```
+
+```csharp
+public class TransactionTests(OrderRepositoryFixture fixture)
+    : IClassFixture<OrderRepositoryFixture>, IAsyncLifetime
+{
+    private OrderDbContext _context = null!;
+
+    public async Task InitializeAsync()
+    {
+        var options = new DbContextOptionsBuilder<OrderDbContext>()
+            .UseNpgsql(fixture.ConnectionString)
+            .Options;
+
+        _context = new OrderDbContext(options);
+        await _context.Database.EnsureDeletedAsync();
+        await _context.Database.EnsureCreatedAsync();
+    }
+
+    public async Task DisposeAsync() => await _context.DisposeAsync();
+
+    [Fact]
+    public async Task TransferItemAsync_ValidTransfer_MovesItemBetweenOrders()
+    {
+        // Arrange
+        var source = new Order
+        {
+            CustomerEmail = "a@b.com",
+            CreatedAt = DateTime.UtcNow,
+            Status = OrderStatus.Pending,
+            Items = [new OrderItem
+            {
+                ProductName = "Widget",
+                Quantity = 1,
+                UnitPrice = 10m
+            }]
+        };
+        var target = new Order
+        {
+            CustomerEmail = "c@d.com",
+            CreatedAt = DateTime.UtcNow,
+            Status = OrderStatus.Pending
+        };
+        _context.Orders.AddRange(source, target);
+        await _context.SaveChangesAsync();
+
+        var itemId = source.Items[0].Id;
+        var service = new OrderService(_context);
+
+        // Act
+        await service.TransferItemAsync(source.Id, target.Id, itemId);
+
+        // Assert — reload from DB
+        var reloadedSource = await _context.Orders
+            .Include(o => o.Items)
+            .FirstAsync(o => o.Id == source.Id);
+        var reloadedTarget = await _context.Orders
+            .Include(o => o.Items)
+            .FirstAsync(o => o.Id == target.Id);
+
+        reloadedSource.Items.ShouldBeEmpty();
+        reloadedTarget.Items.Count.ShouldBe(1);
+        reloadedTarget.Items[0].ProductName.ShouldBe("Widget");
+    }
+
+    [Fact]
+    public async Task TransferItemAsync_InvalidItem_RollsBack()
+    {
+        // Arrange
+        var source = new Order
+        {
+            CustomerEmail = "a@b.com",
+            CreatedAt = DateTime.UtcNow,
+            Status = OrderStatus.Pending,
+            Items = [new OrderItem
+            {
+                ProductName = "Widget",
+                Quantity = 1,
+                UnitPrice = 10m
+            }]
+        };
+        _context.Orders.Add(source);
+        await _context.SaveChangesAsync();
+
+        var service = new OrderService(_context);
+
+        // Act & Assert — transferring a non-existent item should fail
+        await Should.ThrowAsync<KeyNotFoundException>(
+            () => service.TransferItemAsync(source.Id, 999, itemId: 99999));
+
+        // Verify source order still has its item (transaction rolled back)
+        var reloaded = await _context.Orders
+            .Include(o => o.Items)
+            .FirstAsync(o => o.Id == source.Id);
+        reloaded.Items.Count.ShouldBe(1);
+    }
+}
+```
+
+### 10.2 Testing Concurrency (Optimistic Concurrency Control)
+
+EF Core supports optimistic concurrency using concurrency tokens or row versions:
+
+```csharp
+// Entity with concurrency token
+public class InventoryItem
+{
+    public int Id { get; set; }
+    public string ProductName { get; set; } = string.Empty;
+    public int StockLevel { get; set; }
+
+    [Timestamp]
+    public byte[] RowVersion { get; set; } = null!;
+}
+```
+
+```csharp
+[Fact]
+public async Task ConcurrentUpdate_SameRow_ThrowsDbUpdateConcurrencyException()
+{
+    // Arrange — seed an inventory item
+    var item = new InventoryItem
+    {
+        ProductName = "Widget",
+        StockLevel = 100
+    };
+    _context.Set<InventoryItem>().Add(item);
+    await _context.SaveChangesAsync();
+
+    // Simulate two users loading the same item
+    var options = new DbContextOptionsBuilder<OrderDbContext>()
+        .UseNpgsql(fixture.ConnectionString)
+        .Options;
+
+    await using var context1 = new OrderDbContext(options);
+    await using var context2 = new OrderDbContext(options);
+
+    var item1 = await context1.Set<InventoryItem>().FindAsync(item.Id);
+    var item2 = await context2.Set<InventoryItem>().FindAsync(item.Id);
+
+    // User 1 updates stock
+    item1!.StockLevel = 90;
+    await context1.SaveChangesAsync();
+
+    // User 2 tries to update the same item — should fail
+    item2!.StockLevel = 80;
+
+    await Should.ThrowAsync<DbUpdateConcurrencyException>(
+        () => context2.SaveChangesAsync());
+}
+```
+
+> **Discussion (10 min):** Why is optimistic concurrency important? What alternatives exist (pessimistic locking)? When would you choose one over the other?
+
+---
+
+## 11. Test Isolation Strategies
+
+### 11.1 Overview of Strategies
+
+When multiple tests share a database, you need a strategy to prevent test interference:
+
+```
+Strategy 1:                 Strategy 2:                Strategy 3:
+PER-TEST DATABASE           TRANSACTION ROLLBACK       TABLE CLEANUP
+─────────────────           ────────────────────       ─────────────
+
+Each test creates           Each test wraps its        Each test deletes
+and drops a new             work in a transaction      data in setup or
+database.                   that is rolled back.       teardown.
+
+Pros:                       Pros:                      Pros:
++ Perfect isolation         + Fast (no DB create)      + Simple to implement
++ No data leaks             + Automatic cleanup        + Works with any DB
+
+Cons:                       Cons:                      Cons:
+- Slowest option            - Cannot test commits      - May miss orphaned data
+- Resource intensive        - Nested tx complexity     - Fragile ordering
+                            - Some ops force commit    - Slower for large datasets
+```
+
+### 11.2 Strategy 1: Per-Test Database (EnsureDeleted + EnsureCreated)
+
+```csharp
+public class IsolatedDatabaseTests(PostgreSqlFixture fixture)
+    : IClassFixture<PostgreSqlFixture>, IAsyncLifetime
+{
+    private OrderDbContext _context = null!;
+
+    public async Task InitializeAsync()
+    {
+        var options = new DbContextOptionsBuilder<OrderDbContext>()
+            .UseNpgsql(fixture.ConnectionString)
+            .Options;
+
+        _context = new OrderDbContext(options);
+        // Drop everything and recreate — clean slate for each test
+        await _context.Database.EnsureDeletedAsync();
+        await _context.Database.EnsureCreatedAsync();
+    }
+
+    public async Task DisposeAsync() => await _context.DisposeAsync();
+
+    [Fact]
+    public async Task Test1_SeesEmptyDatabase()
+    {
+        var count = await _context.Orders.CountAsync();
+        count.ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task Test2_AlsoSeesEmptyDatabase()
+    {
+        // Even if Test1 added data, this test starts fresh
+        var count = await _context.Orders.CountAsync();
+        count.ShouldBe(0);
+    }
+}
+```
+
+### 11.3 Strategy 2: Transaction Rollback
+
+```csharp
+public class TransactionRollbackTests(PostgreSqlFixture fixture)
+    : IClassFixture<PostgreSqlFixture>, IAsyncLifetime
+{
+    private OrderDbContext _context = null!;
+    private IDbContextTransaction _transaction = null!;
+
+    public async Task InitializeAsync()
+    {
+        var options = new DbContextOptionsBuilder<OrderDbContext>()
+            .UseNpgsql(fixture.ConnectionString)
+            .Options;
+
+        _context = new OrderDbContext(options);
+        await _context.Database.EnsureCreatedAsync();
+
+        // Begin a transaction that will be rolled back after each test
+        _transaction = await _context.Database.BeginTransactionAsync();
+    }
+
+    public async Task DisposeAsync()
+    {
+        // Roll back — all changes from this test are undone
+        await _transaction.RollbackAsync();
+        await _transaction.DisposeAsync();
+        await _context.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task AddOrder_WithinTransaction_VisibleDuringTest()
+    {
+        // Arrange & Act
+        _context.Orders.Add(new Order
+        {
+            CustomerEmail = "test@test.com",
+            CreatedAt = DateTime.UtcNow,
+            Status = OrderStatus.Pending
+        });
+        await _context.SaveChangesAsync();
+
+        // Assert — data is visible within the transaction
+        var count = await _context.Orders.CountAsync();
+        count.ShouldBe(1);
+
+        // After DisposeAsync, this data will be rolled back
+    }
+}
+```
+
+### 11.4 Strategy 3: Table Cleanup
+
+```csharp
+public class TableCleanupTests(PostgreSqlFixture fixture)
+    : IClassFixture<PostgreSqlFixture>, IAsyncLifetime
+{
+    private OrderDbContext _context = null!;
+
+    public async Task InitializeAsync()
+    {
+        var options = new DbContextOptionsBuilder<OrderDbContext>()
+            .UseNpgsql(fixture.ConnectionString)
+            .Options;
+
+        _context = new OrderDbContext(options);
+        await _context.Database.EnsureCreatedAsync();
+
+        // Clean all tables before each test
+        await CleanTablesAsync();
+    }
+
+    private async Task CleanTablesAsync()
+    {
+        // Delete in correct order to respect foreign keys
+        _context.OrderItems.RemoveRange(_context.OrderItems);
+        _context.Orders.RemoveRange(_context.Orders);
+        await _context.SaveChangesAsync();
+    }
+
+    public async Task DisposeAsync() => await _context.DisposeAsync();
+
+    [Fact]
+    public async Task Test_StartsWithCleanTables()
+    {
+        var orderCount = await _context.Orders.CountAsync();
+        var itemCount = await _context.OrderItems.CountAsync();
+
+        orderCount.ShouldBe(0);
+        itemCount.ShouldBe(0);
+    }
+}
+```
+
+### 11.5 Comparison Summary
+
+| Strategy | Isolation | Speed | Can Test Commits? | Complexity |
+|---|---|---|---|---|
+| Per-test database (EnsureDeleted) | Perfect | Slowest | Yes | Low |
+| Transaction rollback | Good | Fastest | No | Medium |
+| Table cleanup | Good | Medium | Yes | Medium |
+| Unique database name per test | Perfect | Slow | Yes | Low |
+
+---
+
+## 12. Data Seeding Strategies
+
+### 12.1 Why Data Seeding Matters
+
+Tests need data. How you create that data affects readability, maintainability, and reliability:
+
+```
+Bad: Inline data creation (verbose, duplicated)
+──────────────────────────────────────────────
+var order1 = new Order { CustomerEmail = "a@b.com", CreatedAt = DateTime.UtcNow,
+    Status = OrderStatus.Pending, Items = new List<OrderItem> {
+        new OrderItem { ProductName = "A", Quantity = 1, UnitPrice = 10m }
+    }};
+var order2 = new Order { CustomerEmail = "c@d.com", ...  // more duplication
+
+Good: Factory methods or builders
+─────────────────────────────────
+var order1 = OrderFactory.CreatePending(items: [("Widget", 2, 10m)]);
+var order2 = OrderFactory.CreateDelivered(email: "vip@co.com");
+```
+
+### 12.2 Factory Methods
+
+```csharp
+public static class TestDataFactory
+{
+    private static int _counter;
+
+    public static Order CreateOrder(
+        string? email = null,
+        OrderStatus status = OrderStatus.Pending,
+        DateTime? createdAt = null,
+        params (string Name, int Qty, decimal Price)[] items)
+    {
+        var order = new Order
+        {
+            CustomerEmail = email ?? $"user{Interlocked.Increment(ref _counter)}@test.com",
+            Status = status,
+            CreatedAt = createdAt ?? DateTime.UtcNow
+        };
+
+        foreach (var (name, qty, price) in items)
+        {
+            order.Items.Add(new OrderItem
+            {
+                ProductName = name,
+                Quantity = qty,
+                UnitPrice = price
+            });
+        }
+
+        return order;
+    }
+
+    public static async Task SeedOrdersAsync(
+        OrderDbContext context, int count, OrderStatus status = OrderStatus.Pending)
+    {
+        for (int i = 0; i < count; i++)
+        {
+            context.Orders.Add(CreateOrder(
+                status: status,
+                items: [($"Product-{i}", 1, 10m + i)]));
+        }
+        await context.SaveChangesAsync();
+    }
+}
+```
+
+### 12.3 Builder Pattern for Complex Test Data
+
+```csharp
+public class OrderBuilder
+{
+    private string _email = "default@test.com";
+    private OrderStatus _status = OrderStatus.Pending;
+    private DateTime _createdAt = DateTime.UtcNow;
+    private readonly List<OrderItem> _items = [];
+
+    public OrderBuilder WithEmail(string email)
+    {
+        _email = email;
+        return this;
+    }
+
+    public OrderBuilder WithStatus(OrderStatus status)
+    {
+        _status = status;
+        return this;
+    }
+
+    public OrderBuilder CreatedOn(DateTime date)
+    {
+        _createdAt = date;
+        return this;
+    }
+
+    public OrderBuilder WithItem(string name, int qty, decimal price)
+    {
+        _items.Add(new OrderItem
+        {
+            ProductName = name,
+            Quantity = qty,
+            UnitPrice = price
+        });
+        return this;
+    }
+
+    public Order Build() => new()
+    {
+        CustomerEmail = _email,
+        Status = _status,
+        CreatedAt = _createdAt,
+        Items = [.. _items]
+    };
+}
+
+// Usage in tests:
+var order = new OrderBuilder()
+    .WithEmail("vip@company.com")
+    .WithStatus(OrderStatus.Delivered)
+    .CreatedOn(new DateTime(2025, 3, 15, 0, 0, 0, DateTimeKind.Utc))
+    .WithItem("Premium Widget", 5, 99.99m)
+    .WithItem("Extended Warranty", 1, 29.99m)
+    .Build();
+```
+
+### 12.4 Seeding with SQL Scripts
+
+For complex scenarios, you may seed data using raw SQL:
+
+```csharp
+private async Task SeedFromSqlAsync(OrderDbContext context)
+{
+    await context.Database.ExecuteSqlRawAsync("""
+        INSERT INTO "Orders" ("CustomerEmail", "CreatedAt", "Status")
+        VALUES
+            ('alice@example.com', '2025-01-15', 'Delivered'),
+            ('bob@example.com',   '2025-02-20', 'Shipped'),
+            ('carol@example.com', '2025-03-10', 'Pending');
+    """);
+}
+```
+
+> **Discussion (5 min):** When would you prefer SQL scripts over C# factory methods for test data? What are the tradeoffs in terms of maintainability and type safety?
+
+---
+
+## 13. Performance Considerations
+
+### 13.1 Container Startup Time
+
+The biggest performance cost is container startup. Here is a typical breakdown:
+
+```
+Operation                        Time
+─────────────────────────────    ────────
+Docker image pull (first time)   10-60s   (cached after first pull)
+Container start                  2-5s
+Database ready (health check)    3-10s
+Schema creation (EnsureCreated)  0.5-2s
+Running a single test            0.01-0.5s
+Container stop + remove          0.5-1s
+
+Total for first test class:      ~6-18s
+Total for subsequent tests:      ~0.01-0.5s each (if container is shared)
+```
+
+### 13.2 Optimization Strategies
+
+#### Strategy 1: Share Containers with Class Fixtures
+
+As shown in Section 7.2, use `IClassFixture<T>` to start one container per test class instead of per test.
+
+#### Strategy 2: Share Containers Across Test Classes with Collection Fixtures
+
+```csharp
+// Define a collection fixture — one container for ALL test classes in the collection
+[CollectionDefinition("Database")]
+public class DatabaseCollection : ICollectionFixture<PostgreSqlFixture>;
+
+// Any test class in this collection shares the same container
+[Collection("Database")]
+public class OrderRepositoryTests(PostgreSqlFixture fixture)
+{
+    [Fact]
+    public async Task SomeTestAsync()
+    {
+        // Uses the shared container from PostgreSqlFixture
+        var options = new DbContextOptionsBuilder<OrderDbContext>()
+            .UseNpgsql(fixture.ConnectionString)
+            .Options;
+        // ...
+    }
+}
+
+[Collection("Database")]
+public class ProductRepositoryTests(PostgreSqlFixture fixture)
+{
+    [Fact]
+    public async Task AnotherTestAsync()
+    {
+        // Same container, different test class
+        // ...
+    }
+}
+```
+
+#### Strategy 3: Container Reuse (Testcontainers Reuse Feature)
+
+Testcontainers supports keeping containers alive between test runs during development:
+
+```csharp
+var container = new PostgreSqlBuilder()
+    .WithImage("postgres:16-alpine")
+    .WithReuse(true)   // Keep container running between test executions
+    .Build();
+```
+
+> **Note:** Container reuse is primarily a development-time optimization. In CI/CD pipelines, containers should be created fresh for each run to ensure isolation.
+
+#### Strategy 4: Parallel Test Execution
+
+xUnit v3 runs test collections in parallel by default. When using collection fixtures, each collection gets its own container, and collections run in parallel:
+
+```
+Collection "Orders"  ──► PostgreSQL Container A ──► Order tests (sequential)
+Collection "Products"──► PostgreSQL Container B ──► Product tests (sequential)
+                              ▲
+                              │ Both collections run in parallel
+```
+
+### 13.3 Performance Comparison
+
+| Approach | Cold Start | Per-Test Cost | Fidelity |
+|---|---|---|---|
+| EF Core InMemory | ~0s | ~1ms | Low |
+| SQLite In-Memory | ~0.1s | ~5ms | Medium |
+| Testcontainers (per test) | ~10s | ~10s | High |
+| Testcontainers (shared fixture) | ~10s | ~50ms | High |
+| Testcontainers (collection fixture) | ~10s | ~50ms | High |
+| Testcontainers (reuse) | ~0s (warm) | ~50ms | High |
+
+> **Discussion (5 min):** For a project with 200 database tests, which sharing strategy would you choose and why? What are the tradeoffs between test isolation and execution speed?
+
+---
+
+## 14. Putting It All Together: A Complete Test Suite
+
+### 14.1 Recommended Project Structure
+
+```
+src/
+  OrderManagement/
+    Data/
+      OrderDbContext.cs
+    Models/
+      Order.cs
+      OrderItem.cs
+    Repositories/
+      OrderRepository.cs
+    Services/
+      OrderService.cs
+
+tests/
+  OrderManagement.Tests/
+    Fixtures/
+      PostgreSqlFixture.cs
+    Helpers/
+      TestDataFactory.cs
+      OrderBuilder.cs
+    Repositories/
+      OrderRepositoryTests.cs
+    Services/
+      OrderServiceTests.cs
+    Migrations/
+      MigrationTests.cs
+    OrderManagement.Tests.csproj
+```
+
+### 14.2 Fixture with Helper Methods
+
+```csharp
+// Fixtures/PostgreSqlFixture.cs
+using Testcontainers.PostgreSql;
+using Microsoft.EntityFrameworkCore;
+
+public class PostgreSqlFixture : IAsyncLifetime
+{
+    public PostgreSqlContainer Container { get; } = new PostgreSqlBuilder()
+        .WithImage("postgres:16-alpine")
+        .Build();
+
+    public string ConnectionString => Container.GetConnectionString();
+
+    public async Task InitializeAsync()
+    {
+        await Container.StartAsync();
+    }
+
+    public async Task DisposeAsync()
+    {
+        await Container.DisposeAsync();
+    }
+
+    public DbContextOptions<OrderDbContext> CreateDbContextOptions()
+    {
+        return new DbContextOptionsBuilder<OrderDbContext>()
+            .UseNpgsql(ConnectionString)
+            .Options;
+    }
+
+    public async Task<OrderDbContext> CreateFreshContextAsync()
+    {
+        var context = new OrderDbContext(CreateDbContextOptions());
+        await context.Database.EnsureDeletedAsync();
+        await context.Database.EnsureCreatedAsync();
+        return context;
+    }
+}
+```
+
+### 14.3 Collection Definition
+
+```csharp
+[CollectionDefinition("Database")]
+public class DatabaseCollection : ICollectionFixture<PostgreSqlFixture>;
+```
+
+### 14.4 Test Class Template
+
+```csharp
+[Collection("Database")]
+public class OrderServiceIntegrationTests(PostgreSqlFixture fixture)
+    : IAsyncLifetime
+{
+    private OrderDbContext _context = null!;
+    private OrderService _service = null!;
+
+    public async Task InitializeAsync()
+    {
+        _context = await fixture.CreateFreshContextAsync();
+        _service = new OrderService(_context);
+    }
+
+    public async Task DisposeAsync()
+    {
+        await _context.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task CompleteWorkflow_CreateAndUpdateOrder()
+    {
+        // Arrange
+        var order = new OrderBuilder()
+            .WithEmail("integration@test.com")
+            .WithItem("Widget", 3, 15.00m)
+            .Build();
+
+        // Act — create
+        _context.Orders.Add(order);
+        await _context.SaveChangesAsync();
+
+        // Act — update status
+        await _service.UpdateStatusAsync(order.Id, OrderStatus.Confirmed);
+
+        // Assert
+        var loaded = await _context.Orders
+            .Include(o => o.Items)
+            .FirstAsync(o => o.Id == order.Id);
+
+        loaded.Status.ShouldBe(OrderStatus.Confirmed);
+        loaded.Items.Count.ShouldBe(1);
+        loaded.TotalAmount.ShouldBe(45.00m);
+    }
+}
+```
+
+---
+
+## 15. Common Pitfalls and Best Practices
+
+### 15.1 Pitfalls to Avoid
+
+| Pitfall | Problem | Solution |
+|---|---|---|
+| Sharing DbContext across tests | State leaks between tests | Create a new DbContext per test |
+| Forgetting `await` on async DB calls | Tests pass without executing DB operations | Always await and verify results |
+| Not disposing containers | Docker containers accumulate on disk | Always implement `IAsyncLifetime` or `IDisposable` |
+| Hardcoding connection strings | Tests fail on different machines | Use Testcontainers' dynamic connection strings |
+| Testing against a shared development DB | Tests interfere with each other and with developers | Each test environment should be isolated |
+| Not testing with production DB engine | Behavior differences between SQLite and production | Use Testcontainers for critical paths |
+| Ignoring test execution time | Test suite becomes too slow to run frequently | Use shared fixtures and container reuse |
+
+### 15.2 Best Practices Summary
+
+```
+1. Match your test DB to production
+   Use the same database engine (SQL Server, PostgreSQL) in tests.
+
+2. Isolate tests
+   Each test should start with known state and not affect other tests.
+
+3. Use factory methods / builders
+   Avoid duplicating test data creation across tests.
+
+4. Share containers wisely
+   One container per test class (IClassFixture) or per collection
+   (ICollectionFixture) — not per test.
+
+5. Test the data layer specifically
+   Constraints, indexes, queries, transactions, migrations.
+
+6. Keep tests focused
+   Each test should verify one behavior, even in integration tests.
+
+7. Use async throughout
+   Database operations are I/O-bound — use async/await consistently.
+
+8. Clean up resources
+   Dispose DbContexts, connections, and containers.
+```
+
+---
+
+## 16. Summary
+
+### Key Takeaways
+
+1. **Database testing catches bugs that unit tests cannot** — query translation errors, constraint violations, migration failures, and concurrency issues only surface against a real database
+2. **EF Core InMemory is fast but low fidelity** — it does not enforce constraints, does not support transactions, and does not translate LINQ to SQL. Use it only for quick prototyping
+3. **SQLite in-memory offers better fidelity** — real SQL execution, constraint enforcement, and transaction support, but with a different SQL dialect than your production database
+4. **Testcontainers provide production parity** — spin up real SQL Server or PostgreSQL in Docker containers for your tests. The startup cost is acceptable when containers are shared
+5. **Test isolation is essential** — use per-test database reset, transaction rollback, or table cleanup to prevent tests from affecting each other
+6. **`IAsyncLifetime` manages container lifecycles** — use it with `IClassFixture` or `ICollectionFixture` to control when containers start and stop
+7. **Data factories and builders make tests readable** — avoid duplicating object creation code across tests
+8. **Performance is manageable** — share containers with fixtures, use container reuse during development, and run test collections in parallel
+
+### Decision Matrix: Choosing an Approach
+
+```
+Question                                    Recommendation
+──────────────────────────────────────────  ─────────────────────
+Do I need to test LINQ-only logic?          InMemory or SQLite
+Do I need to test constraints?              SQLite or Testcontainers
+Do I need to test migrations?               Testcontainers
+Do I need to test transactions?             SQLite or Testcontainers
+Do I need production SQL dialect fidelity?  Testcontainers
+Do I need maximum speed?                    InMemory
+Do I need CI/CD compatibility?              Testcontainers (with Docker)
+```
+
+### Preview of Next Lecture
+
+In **Lecture 5: Performance Testing with k6**, we will:
+- Understand why performance testing matters and when to do it
+- Learn the types of performance tests: load, stress, spike, soak
+- Write performance test scripts with k6
+- Define performance thresholds and SLAs
+- Analyze performance test results and identify bottlenecks
+- Integrate performance tests into CI/CD pipelines
+
+---
+
+## References and Further Reading
+
+- **Testcontainers for .NET Documentation** — https://dotnet.testcontainers.org/
+- **EF Core Testing Documentation** — https://learn.microsoft.com/en-us/ef/core/testing/
+- **EF Core — Testing Without Your Production Database System** — https://learn.microsoft.com/en-us/ef/core/testing/testing-without-the-database
+- **EF Core — Testing Against Your Production Database System** — https://learn.microsoft.com/en-us/ef/core/testing/testing-with-the-database
+- **xUnit v3 Documentation** — https://xunit.net/docs/getting-started/v3/cmdline
+- **Shouldly Documentation** — https://docs.shouldly.org/
+- **Docker Documentation** — https://docs.docker.com/get-started/
+- **"Unit Testing Principles, Practices, and Patterns"** — Vladimir Khorikov (Manning, 2020) — Chapter 8: Integration Testing
+- **PostgreSQL Docker Image** — https://hub.docker.com/_/postgres
+- **SQL Server Docker Image** — https://hub.docker.com/r/microsoft/mssql-server

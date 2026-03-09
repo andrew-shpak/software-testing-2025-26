@@ -6,7 +6,7 @@ Test external REST API integrations using HTTP client abstraction, response hand
 
 ## Prerequisites
 
-- .NET 8 SDK or later installed
+- .NET 10 SDK or later installed
 - C# fundamentals including interfaces, dependency injection, and async/await
 - Understanding of HTTP methods (GET, POST, PUT, DELETE), status codes, and headers
 - Familiarity with `HttpClient` and `IHttpClientFactory` in .NET
@@ -499,7 +499,7 @@ public class ResilienceTests : IAsyncLifetime
 - [WireMock.Net — Response Templating](https://github.com/WireMock-Net/WireMock.Net/wiki/Response-Templating)
 - [WireMock.Net — Scenarios and Stateful Behavior](https://github.com/WireMock-Net/WireMock.Net/wiki/Scenarios-and-Stateful-Behavior)
 - [Microsoft.Extensions.Http.Resilience Documentation](https://learn.microsoft.com/en-us/dotnet/core/resilience/http-resilience)
-- [Building Resilient Cloud Services with .NET 8](https://devblogs.microsoft.com/dotnet/building-resilient-cloud-services-with-dotnet-8/)
+- [Building Resilient Cloud Services with .NET](https://devblogs.microsoft.com/dotnet/building-resilient-cloud-services-with-dotnet-8/)
 - [IHttpClientFactory Guidelines](https://learn.microsoft.com/en-us/dotnet/core/extensions/httpclient-factory)
 - [Typed HttpClient in ASP.NET Core](https://learn.microsoft.com/en-us/aspnet/core/fundamentals/http-requests#typed-clients)
 - [Polly — Resilience and Transient Fault Handling](https://github.com/App-vNext/Polly)

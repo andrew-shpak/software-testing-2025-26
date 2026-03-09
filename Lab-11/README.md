@@ -8,7 +8,7 @@ Write end-to-end tests that verify complete user workflows through a web applica
 
 Before starting this lab, make sure you have:
 
-- .NET 8 SDK (or later) installed
+- .NET 10 SDK (or later) installed
 - Familiarity with ASP.NET Core Razor Pages or MVC
 - Completed previous labs on unit and integration testing
 - Basic understanding of HTML forms, CSS selectors, and DOM structure
@@ -21,7 +21,7 @@ After adding the `Microsoft.Playwright` NuGet package, you must install the brow
 dotnet build Lab11.Tests
 
 # Install browsers (Chromium, Firefox, WebKit)
-pwsh Lab11.Tests/bin/Debug/net8.0/playwright.ps1 install
+pwsh Lab11.Tests/bin/Debug/net10.0/playwright.ps1 install
 ```
 
 > **Note:** On CI environments you may also need to install system dependencies. Run `pwsh playwright.ps1 install-deps` to install required OS-level libraries.
@@ -105,7 +105,7 @@ dotnet add Lab11.Tests package Microsoft.Playwright
 dotnet add Lab11.Tests package Shouldly
 
 # Install Playwright browsers
-pwsh Lab11.Tests/bin/Debug/net8.0/playwright.ps1 install
+pwsh Lab11.Tests/bin/Debug/net10.0/playwright.ps1 install
 ```
 
 ## Tasks

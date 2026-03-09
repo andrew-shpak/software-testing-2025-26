@@ -8,7 +8,7 @@ Test full API request/response cycles including routing, model binding, validati
 
 Before starting this lab, make sure you have:
 
-- .NET 8+ SDK installed (`dotnet --version`)
+- .NET 10+ SDK installed (`dotnet --version`)
 - A working understanding of ASP.NET Core controllers, model binding, and Data Annotations (or FluentValidation)
 - Familiarity with HTTP methods, status codes, and JSON serialization
 - Completed Lab 3 (integration testing with `WebApplicationFactory`)

@@ -9,7 +9,7 @@ Set up automated testing pipelines using GitHub Actions. Configure test executio
 Before starting this lab, make sure you have:
 
 - A GitHub account with a repository you can push to
-- .NET 8 SDK (or later) installed locally
+- .NET 10 SDK (or later) installed locally
 - A working .NET solution with tests from any previous lab
 - Basic familiarity with YAML syntax
 - Understanding of Git branching (creating branches, pull requests)
@@ -46,7 +46,7 @@ In this lab, we focus on the **CI** side: running tests automatically.
 | **Job** | A set of steps that run on the same runner |
 | **Step** | A single command or action within a job |
 | **Runner** | A virtual machine that executes the job (`ubuntu-latest`, `windows-latest`, etc.) |
-| **Action** | A reusable unit of code (e.g., `actions/checkout@v4`) |
+| **Action** | A reusable unit of code (e.g., `actions/checkout@v6`) |
 | **Trigger** | An event that starts the workflow (`push`, `pull_request`, `schedule`, etc.) |
 | **Artifact** | A file produced by a workflow and uploaded for later access |
 | **Matrix** | A strategy that runs the same job with different configurations |
@@ -138,11 +138,11 @@ jobs:
   build-and-test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '8.0.x'
+          dotnet-version: '10.0.x'
       - name: Restore
         run: dotnet restore
       - name: Build
@@ -226,7 +226,7 @@ Configure the pipeline to test across multiple configurations:
 strategy:
   matrix:
     os: [ubuntu-latest, windows-latest, macos-latest]
-    dotnet-version: ['8.0.x', '9.0.x']
+    dotnet-version: ['9.0.x', '10.0.x']
 ```
 
 1. Run tests on all OS + .NET version combinations
@@ -243,9 +243,9 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        dotnet-version: ['8.0.x', '9.0.x']
+        dotnet-version: ['9.0.x', '10.0.x']
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Setup .NET ${{ matrix.dotnet-version }}
         uses: actions/setup-dotnet@v4
         with:
@@ -260,11 +260,11 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '8.0.x'
+          dotnet-version: '10.0.x'
       - name: Check formatting
         run: dotnet format --verify-no-changes --verbosity diagnostic
 ```

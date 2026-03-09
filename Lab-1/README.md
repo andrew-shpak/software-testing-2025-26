@@ -6,7 +6,7 @@ Learn the basics of unit testing in C#: writing test cases with xUnit v3, using 
 
 ## Prerequisites
 
-- .NET 8+ SDK installed
+- .NET 10+ SDK installed
 - Basic C# knowledge (classes, methods, generics)
 - IDE: Visual Studio / Rider / VS Code with C# extension
 

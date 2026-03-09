@@ -6,7 +6,7 @@ Learn to write microbenchmarks for C# code, profile memory allocations, and iden
 
 ## Prerequisites
 
-- .NET 8 SDK or later installed
+- .NET 10 SDK or later installed
 - C# fundamentals including generics, LINQ, async/await, and `Span<T>`
 - Understanding of value types vs reference types in .NET
 - Familiarity with the .NET garbage collector (Gen0 / Gen1 / Gen2 collections)

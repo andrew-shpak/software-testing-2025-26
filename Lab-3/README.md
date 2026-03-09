@@ -8,7 +8,7 @@ Learn to write integration tests that verify how multiple components work togeth
 
 Before starting this lab, make sure you have:
 
-- .NET 8+ SDK installed (`dotnet --version`)
+- .NET 10+ SDK installed (`dotnet --version`)
 - A working understanding of ASP.NET Core middleware pipeline, dependency injection, and the controller/service/repository pattern
 - Familiarity with xUnit v3 test lifecycle (`IAsyncLifetime`, `IClassFixture<T>`)
 - Completed Lab 1 and Lab 2 (unit testing fundamentals and mocking)
