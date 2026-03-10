@@ -53,17 +53,17 @@
 
 ### 1.2 Що може піти не так без тестування бази даних
 
-| Category | Example |
+| Категорія | Приклад |
 |---|---|
-| Mapping errors | EF Core silently ignores a property, data is never persisted |
-| Query translation | LINQ expression works in-memory but fails when translated to SQL |
-| Migration drift | Migration script breaks on production schema |
-| Constraint violations | Unique index conflict not caught until production |
-| Transaction bugs | Partial updates leave data in inconsistent state |
-| Performance issues | N+1 query only visible against real DB with realistic data |
-| Provider-specific behavior | `LIKE` is case-sensitive in PostgreSQL but not in SQL Server |
+| Помилки маппінгу | EF Core мовчки ігнорує властивість, дані ніколи не зберігаються |
+| Трансляція запитів | LINQ-вираз працює in-memory, але зазнає невдачі при трансляції в SQL |
+| Дрейф міграцій | Скрипт міграції ламається на продакшн-схемі |
+| Порушення обмежень | Конфлікт унікального індексу не виявлений до продакшну |
+| Помилки транзакцій | Часткові оновлення залишають дані в неузгодженому стані |
+| Проблеми продуктивності | Запит N+1 видимий лише на реальній БД з реалістичними даними |
+| Поведінка, специфічна для провайдера | `LIKE` чутливий до регістру в PostgreSQL, але не в SQL Server |
 
-> **Discussion (5 min):** Have you ever encountered a bug that only appeared when running against a real database? What happened, and how could testing have caught it earlier?
+> **Обговорення (5 хв):** Чи стикалися ви з помилкою, яка з'являлася лише при роботі з реальною базою даних? Що сталося, і як тестування могло б виявити її раніше?
 
 ---
 
@@ -72,18 +72,18 @@
 ### 2.1 Три основні виклики
 
 ```
-Challenge 1: STATE                Challenge 2: ISOLATION           Challenge 3: SPEED
+Виклик 1: СТАН                   Виклик 2: ІЗОЛЯЦІЯ              Виклик 3: ШВИДКІСТЬ
 ──────────────────                ─────────────────────            ────────────────────
-Databases are stateful.           Tests must not affect            Starting a real DB
-Each test may leave               each other. Test A's             is slow. Running
-behind data that                  data should not leak             hundreds of tests
-affects the next test.            into Test B.                     against a DB can
-                                                                   take minutes.
+Бази даних зберігають стан.       Тести не повинні впливати       Запуск реальної БД
+Кожен тест може залишити          один на одного. Дані             повільний. Виконання
+дані, що впливають                тесту A не повинні               сотень тестів
+на наступний тест.                потрапляти в тест B.             з БД може зайняти
+                                                                   хвилини.
 
-Solution:                         Solution:                        Solution:
-Reset state between               Separate databases,              Container reuse,
-tests or use                      transaction rollback,            parallel execution,
-transaction rollback.             or cleanup scripts.              lightweight providers.
+Рішення:                          Рішення:                         Рішення:
+Скидати стан між                  Окремі бази даних,               Повторне використання
+тестами або                       відкат транзакцій,               контейнерів, паралельне
+використовувати відкат.           або скрипти очищення.            виконання, легкі провайдери.
 ```
 
 ### 2.2 Піраміда тестування та тести бази даних
@@ -92,13 +92,13 @@ transaction rollback.             or cleanup scripts.              lightweight p
 
 ```
          /\
-        /  \          E2E Tests (few, slow, expensive)
+        /  \          E2E тести (мало, повільні, дорогі)
        /    \
       /──────\
-     /        \       Integration Tests ◄── Database tests live here
+     /        \       Інтеграційні тести ◄── Тести БД знаходяться тут
     /          \
    /────────────\
-  /              \    Unit Tests (many, fast, cheap)
+  /              \    Модульні тести (багато, швидкі, дешеві)
  /________________\
 ```
 
@@ -109,25 +109,25 @@ transaction rollback.             or cleanup scripts.              lightweight p
 Різні підходи до тестування балансують між швидкістю та точністю (наскільки тестове середовище відповідає продакшну):
 
 ```
-Speed       ████████████████████████  Fast
+Швидкість   ████████████████████████  Швидко
             ████████████████
             ████████████
             ████████
-Fidelity    ████████████████████████  High
+Точність    ████████████████████████  Висока
 
             ┌──────────────┐
-            │  EF Core     │  Fastest, lowest fidelity
-            │  InMemory    │  No SQL, no constraints
+            │  EF Core     │  Найшвидший, найнижча точність
+            │  InMemory    │  Без SQL, без обмежень
             ├──────────────┤
-            │  SQLite      │  Fast, medium fidelity
-            │  In-Memory   │  Real SQL, some limitations
+            │  SQLite      │  Швидкий, середня точність
+            │  In-Memory   │  Реальний SQL, деякі обмеження
             ├──────────────┤
-            │ Testcontainers│  Slower startup, highest fidelity
-            │ (Real DB)     │  Identical to production
+            │ Testcontainers│  Повільніший запуск, найвища точність
+            │ (Реальна БД)  │  Ідентично продакшну
             └──────────────┘
 ```
 
-> **Discussion (5 min):** Given the tradeoffs above, when would you choose each approach? Is there a "one size fits all" solution?
+> **Обговорення (5 хв):** З огляду на описані компроміси, коли б ви обрали кожен підхід? Чи існує універсальне рішення?
 
 ---
 
@@ -270,15 +270,15 @@ public class ProductRepositoryInMemoryTests
 
 InMemory провайдер має значні обмеження, які роблять його непридатним для багатьох сценаріїв тестування:
 
-| Limitation | Impact |
+| Обмеження | Вплив |
 |---|---|
-| No SQL translation | LINQ is executed in .NET, not translated to SQL. A query that compiles in C# may fail in production. |
-| No referential integrity | Foreign key constraints are not enforced. You can insert orphan records. |
-| No unique constraints | `HasIndex().IsUnique()` is ignored. Duplicate data is silently accepted. |
-| No transactions | `BeginTransaction()` is a no-op. Transaction rollback behavior cannot be tested. |
-| No raw SQL support | `FromSqlRaw()` / `ExecuteSqlRaw()` throw exceptions. |
-| No provider-specific features | No JSON columns, spatial types, full-text search, etc. |
-| Case sensitivity | String comparisons behave differently than in SQL Server or PostgreSQL. |
+| Немає трансляції SQL | LINQ виконується в .NET, не транслюється в SQL. Запит, що компілюється в C#, може зазнати невдачі в продакшні. |
+| Немає посилальної цілісності | Обмеження зовнішніх ключів не примусово виконуються. Можна вставити осиротілі записи. |
+| Немає унікальних обмежень | `HasIndex().IsUnique()` ігнорується. Дублікати даних мовчки приймаються. |
+| Немає транзакцій | `BeginTransaction()` — це no-op. Поведінку відкату транзакцій неможливо протестувати. |
+| Немає підтримки сирого SQL | `FromSqlRaw()` / `ExecuteSqlRaw()` викидають винятки. |
+| Немає специфічних для провайдера функцій | Немає JSON-колонок, просторових типів, повнотекстового пошуку тощо. |
+| Чутливість до регістру | Порівняння рядків поводиться інакше, ніж у SQL Server чи PostgreSQL. |
 
 ```csharp
 // This test PASSES with InMemory but FAILS against a real database
@@ -301,17 +301,17 @@ public async Task AddAsync_DuplicateName_ShouldViolateUniqueConstraint()
 
 ### 3.4 Коли використовувати InMemory
 
-| Use Case | Recommendation |
+| Випадок використання | Рекомендація |
 |---|---|
-| Quick prototyping and learning | Acceptable |
-| Testing pure LINQ logic (no SQL specifics) | Acceptable with caution |
-| Testing repository patterns (basic CRUD) | Acceptable if you understand limitations |
-| Testing query translation correctness | **Use a real database** |
-| Testing constraints and data integrity | **Use a real database** |
-| Testing migrations | **Use a real database** |
-| Testing transactions | **Use a real database** |
+| Швидке прототипування та навчання | Прийнятно |
+| Тестування чистої LINQ-логіки (без специфіки SQL) | Прийнятно з обережністю |
+| Тестування патернів репозиторіїв (базовий CRUD) | Прийнятно, якщо ви розумієте обмеження |
+| Тестування коректності трансляції запитів | **Використовуйте реальну базу даних** |
+| Тестування обмежень та цілісності даних | **Використовуйте реальну базу даних** |
+| Тестування міграцій | **Використовуйте реальну базу даних** |
+| Тестування транзакцій | **Використовуйте реальну базу даних** |
 
-> **Note:** The EF Core team explicitly recommends against using InMemory for testing. From the [official documentation](https://learn.microsoft.com/en-us/ef/core/testing/): *"The in-memory database frequently behaves differently than relational databases. Only use the in-memory database if you understand the issues and tradeoffs involved."*
+> **Примітка:** Команда EF Core явно не рекомендує використовувати InMemory для тестування. З [офіційної документації](https://learn.microsoft.com/en-us/ef/core/testing/): *"In-memory база даних часто поводиться інакше, ніж реляційні бази даних. Використовуйте in-memory базу даних лише якщо ви розумієте пов'язані з цим проблеми та компроміси."*
 
 ---
 
@@ -414,29 +414,29 @@ public class ProductRepositorySqliteTests : IDisposable
 
 SQLite кращий за InMemory, але це все ще не ваша продакшн база даних:
 
-| Limitation | Impact |
+| Обмеження | Вплив |
 |---|---|
-| Different SQL dialect | `GETDATE()`, `NEWID()`, `TOP`, `IDENTITY` do not exist in SQLite |
-| No stored procedures | Cannot test stored procedures or DB functions |
-| Limited type system | No `decimal` precision — stored as `REAL` (floating point) |
-| No `ALTER COLUMN` | EF Core migrations using `AlterColumn` may fail |
-| No concurrent connections | In-memory mode uses a single connection |
-| Missing features | No computed columns, no JSON functions (varies by version) |
-| Different collation | String comparison and sorting may differ from production |
+| Інший діалект SQL | `GETDATE()`, `NEWID()`, `TOP`, `IDENTITY` не існують у SQLite |
+| Немає збережених процедур | Неможливо тестувати збережені процедури або функції БД |
+| Обмежена система типів | Немає точності `decimal` — зберігається як `REAL` (з плаваючою комою) |
+| Немає `ALTER COLUMN` | Міграції EF Core з використанням `AlterColumn` можуть зазнати невдачі |
+| Немає конкурентних з'єднань | In-memory режим використовує одне з'єднання |
+| Відсутні функції | Немає обчислюваних колонок, JSON-функцій (залежить від версії) |
+| Інше зіставлення | Порівняння рядків та сортування можуть відрізнятися від продакшну |
 
 ```
-Comparison:   InMemory         SQLite           Real DB
+Порівняння:   InMemory         SQLite           Реальна БД
               ────────         ──────           ───────
-SQL?          No               Yes (subset)     Yes (full)
-Constraints?  No               Yes              Yes
-Transactions? No               Yes              Yes
-Migrations?   No               Partial          Yes
-SQL dialect?  N/A              SQLite           Production dialect
-Speed?        Fastest          Fast             Slower (startup)
-Fidelity?     Low              Medium           High
+SQL?          Ні               Так (підмножина) Так (повний)
+Обмеження?    Ні               Так              Так
+Транзакції?   Ні               Так              Так
+Міграції?     Ні               Частково         Так
+Діалект SQL?  Н/Д              SQLite           Продакшн-діалект
+Швидкість?    Найшвидший       Швидкий          Повільніший (запуск)
+Точність?     Низька           Середня          Висока
 ```
 
-> **Discussion (5 min):** Given the limitations of SQLite, what kind of bugs could still slip through tests that pass on SQLite but fail on SQL Server or PostgreSQL?
+> **Обговорення (5 хв):** З огляду на обмеження SQLite, які помилки все ще можуть пройти через тести, що проходять на SQLite, але зазнають невдачі на SQL Server чи PostgreSQL?
 
 ---
 
@@ -478,14 +478,14 @@ Testcontainers — це бібліотека, що надає легковагі
 
 ### 5.2 Чому Testcontainers?
 
-| Benefit | Description |
+| Перевага | Опис |
 |---|---|
-| **Production parity** | Tests run against the exact same database engine as production |
-| **No shared state** | Each test run gets a fresh container — no stale data |
-| **No installation required** | Developers do not need to install SQL Server or PostgreSQL locally |
-| **Reproducible** | Same container image = same behavior on every machine and in CI |
-| **Isolated** | Each test class (or test) can have its own container |
-| **Automatic cleanup** | Containers are removed when tests finish |
+| **Паритет з продакшном** | Тести запускаються на тому самому двигуні БД, що й продакшн |
+| **Немає спільного стану** | Кожен запуск тестів отримує свіжий контейнер — жодних застарілих даних |
+| **Не потрібна інсталяція** | Розробникам не потрібно встановлювати SQL Server або PostgreSQL локально |
+| **Відтворюваність** | Той самий образ контейнера = та сама поведінка на кожній машині та в CI |
+| **Ізольованість** | Кожен тестовий клас (або тест) може мати власний контейнер |
+| **Автоматичне очищення** | Контейнери видаляються після завершення тестів |
 
 ### 5.3 Передумови
 
