@@ -1,66 +1,66 @@
-# Software Testing / Тестування програмного забезпечення
+# Тестування програмного забезпечення
 
-Course materials for the Software Testing course (2025-26).
+Матеріали курсу з тестування програмного забезпечення (2025-26).
 
-## Course Objectives
+## Цілі курсу
 
-- Understand fundamental concepts, principles, and levels of software testing
-- Apply black-box and white-box test design techniques
-- Write and maintain automated tests using modern frameworks
-- Evaluate software quality through performance and security testing
-- Integrate testing into CI/CD pipelines and development workflows
+- Розуміти основні концепції, принципи та рівні тестування програмного забезпечення
+- Застосовувати техніки проєктування тестів на основі чорної та білої скриньки
+- Писати та підтримувати автоматизовані тести з використанням сучасних фреймворків
+- Оцінювати якість програмного забезпечення за допомогою тестування продуктивності та безпеки
+- Інтегрувати тестування в CI/CD конвеєри та робочі процеси розробки
 
-## Prerequisites
+## Передумови
 
-- Basic programming knowledge (any language)
-- Familiarity with version control (Git)
-- Understanding of software development lifecycle
+- Базові знання програмування (будь-яка мова)
+- Знайомство з системами контролю версій (Git)
+- Розуміння життєвого циклу розробки програмного забезпечення
 
-## Structure
+## Структура
 
-### Lectures
+### Лекції
 
-| # | Topic |
-|---|-------|
-| 1 | [Introduction to Software Testing](Lecture-1/) |
-| 2 | [Test Levels and Types](Lecture-2/) |
-| 3 | [Black-Box Test Design Techniques](Lecture-3/) |
-| 4 | [White-Box Test Design Techniques](Lecture-4/) |
-| 5 | [Test Automation Fundamentals](Lecture-5/) |
-| 6 | [Performance and Security Testing](Lecture-6/) |
-| 7 | [Test Management and CI/CD Integration](Lecture-7/) |
+| # | Тема |
+|---|------|
+| 1 | [Вступ до тестування програмного забезпечення](Lecture-1/) |
+| 2 | [Рівні та типи тестування](Lecture-2/) |
+| 3 | [Техніки проєктування тестів на основі чорної скриньки](Lecture-3/) |
+| 4 | [Техніки проєктування тестів на основі білої скриньки](Lecture-4/) |
+| 5 | [Основи автоматизації тестування](Lecture-5/) |
+| 6 | [Тестування продуктивності та безпеки](Lecture-6/) |
+| 7 | [Управління тестуванням та інтеграція з CI/CD](Lecture-7/) |
 
-### Labs
+### Лабораторні роботи
 
-| # | Lab |
-|---|-----|
-| 1 | [Unit Testing: Fundamentals](Lab-1/) |
-| 2 | [Unit Testing: Mocking and Test Doubles](Lab-2/) |
-| 3 | [Integration Testing: Components](Lab-3/) |
-| 4 | [Integration Testing: API](Lab-4/) |
-| 5 | [Database Testing: Queries and Migrations](Lab-5/) |
-| 6 | [Database Testing: Data Integrity and Transactions](Lab-6/) |
-| 7 | [Performance Testing: Load and Stress](Lab-7/) |
-| 8 | [Performance Testing: Profiling and Benchmarks](Lab-8/) |
-| 9 | [Services Testing: REST API](Lab-9/) |
-| 10 | [Services Testing: Microservices and Contract Testing](Lab-10/) |
-| 11 | [Services Testing: End-to-End](Lab-11/) |
-| 12 | [CI/CD Pipelines for Testing](Lab-12/) |
-| 13 | [Individual Project Defense / Захист індивідуального проекту](Lab-13/) |
-| 14 | [Individual Project Defense / Захист індивідуального проекту](Lab-14/) |
-| 15 | [Individual Project Defense / Захист індивідуального проекту](Lab-15/) |
+| # | Лабораторна робота |
+|---|---------------------|
+| 1 | [Модульне тестування: Основи](Lab-1/) |
+| 2 | [Модульне тестування: Мокінг та тестові дублери](Lab-2/) |
+| 3 | [Інтеграційне тестування: Компоненти](Lab-3/) |
+| 4 | [Інтеграційне тестування: API](Lab-4/) |
+| 5 | [Тестування баз даних: Запити та міграції](Lab-5/) |
+| 6 | [Тестування баз даних: Цілісність даних та транзакції](Lab-6/) |
+| 7 | [Тестування продуктивності: Навантажувальне та стресове](Lab-7/) |
+| 8 | [Тестування продуктивності: Профілювання та бенчмарки](Lab-8/) |
+| 9 | [Тестування сервісів: REST API](Lab-9/) |
+| 10 | [Тестування сервісів: Мікросервіси та контрактне тестування](Lab-10/) |
+| 11 | [Тестування сервісів: Наскрізне тестування](Lab-11/) |
+| 12 | [CI/CD конвеєри для тестування](Lab-12/) |
+| 13 | [Захист індивідуального проєкту](Lab-13/) |
+| 14 | [Захист індивідуального проєкту](Lab-14/) |
+| 15 | [Захист індивідуального проєкту](Lab-15/) |
 
-### Exams
+### Екзамени
 
-- [Exam tasks and variants](exams/)
+- [Екзаменаційні завдання та варіанти](exams/)
 
-## Grading
+## Оцінювання
 
-| Component | Weight |
-|-----------|--------|
-| Lab assignments | 60% |
-| Exams | 40% |
+| Компонент | Вага |
+|-----------|------|
+| Лабораторні роботи | 60% |
+| Екзамени | 40% |
 
-## License
+## Ліцензія
 
 [MIT](LICENSE)

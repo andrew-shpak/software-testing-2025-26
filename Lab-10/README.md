@@ -1,79 +1,79 @@
-# Lab 10 — Services Testing: Microservices and Contract Testing
+# Лабораторна 10 — Тестування сервісів: мікросервіси та контрактне тестування
 
-## Objective
+## Мета
 
-Learn contract testing for microservice communication. Ensure that service providers and consumers agree on API contracts without requiring end-to-end integration.
+Вивчити контрактне тестування для комунікації мікросервісів. Переконатися, що постачальники та споживачі сервісів узгоджують контракти API без необхідності наскрізної інтеграції.
 
-**Duration:** 60 minutes
+**Тривалість:** 60 хвилин
 
-## Prerequisites
+## Передумови
 
-Before starting this lab, make sure you have:
+Перед початком цієї лабораторної переконайтеся, що у вас є:
 
-- .NET 10 SDK (or later) installed
-- A working understanding of REST APIs and HTTP methods
-- Familiarity with xUnit test structure (from previous labs)
-- Basic knowledge of JSON serialization/deserialization in C#
-- Completed Labs 1-9 (especially Labs 7-8 on integration and API testing)
+- Встановлений .NET 10 SDK (або новіший)
+- Розуміння REST API та HTTP-методів
+- Знайомство зі структурою тестів xUnit (з попередніх лабораторних)
+- Базові знання серіалізації/десеріалізації JSON у C#
+- Виконані Лабораторні 1-9 (особливо Лабораторні 7-8 з інтеграційного та API-тестування)
 
-Install the Pact CLI tools (optional, for debugging):
+Встановіть інструменти CLI Pact (необов'язково, для налагодження):
 
 ```bash
-# On macOS
+# На macOS
 brew install pact-foundation/pact-ruby-standalone/pact
 
-# On Windows (via Chocolatey)
+# На Windows (через Chocolatey)
 choco install pact
 ```
 
-## Key Concepts
+## Ключові концепції
 
-### What Is Contract Testing?
+### Що таке контрактне тестування?
 
-Contract testing verifies that two services (a **consumer** and a **provider**) can communicate correctly by testing against a shared **contract** (also called a "pact"). Unlike end-to-end integration tests, contract tests run independently for each service.
+Контрактне тестування перевіряє, що два сервіси (**споживач** та **постачальник**) можуть правильно комунікувати, тестуючи проти спільного **контракту** (також називається "пакт"). На відміну від наскрізних інтеграційних тестів, контрактні тести запускаються незалежно для кожного сервісу.
 
-**Why not just use integration tests?**
+**Чому б просто не використовувати інтеграційні тести?**
 
-| Aspect | Integration Tests | Contract Tests |
-|--------|-------------------|----------------|
-| Speed | Slow (both services must run) | Fast (each side tested independently) |
-| Reliability | Flaky (network, environment) | Deterministic (no real network calls) |
-| Feedback | Late (need deployed services) | Early (runs in unit test phase) |
-| Scope | Tests everything at once | Tests only the API boundary |
+| Аспект | Інтеграційні тести | Контрактні тести |
+|--------|---------------------|-------------------|
+| Швидкість | Повільні (обидва сервіси мають працювати) | Швидкі (кожна сторона тестується незалежно) |
+| Надійність | Нестабільні (мережа, середовище) | Детерміновані (без реальних мережевих викликів) |
+| Зворотний зв'язок | Пізній (потрібні розгорнуті сервіси) | Ранній (запускається на етапі модульних тестів) |
+| Охоплення | Тестує все одразу | Тестує лише межу API |
 
-### The Pact Workflow
+### Робочий процес Pact
 
-1. **Consumer writes tests** describing what it expects from the provider (requests and expected responses).
-2. **PactNet generates a Pact file** (JSON) capturing those expectations.
-3. **Provider verifies the Pact file** by replaying the interactions against its real implementation.
-4. If verification passes, both sides are compatible. If it fails, the contract is broken.
+1. **Споживач пише тести**, описуючи, що він очікує від постачальника (запити та очікувані відповіді).
+2. **PactNet генерує файл Pact** (JSON), що фіксує ці очікування.
+3. **Постачальник верифікує файл Pact**, відтворюючи взаємодії проти своєї реальної реалізації.
+4. Якщо верифікація пройшла, обидві сторони сумісні. Якщо невдача — контракт порушено.
 
 ```
-Consumer Tests          Pact File (JSON)          Provider Verification
+Тести споживача           Файл Pact (JSON)          Верифікація постачальника
  ┌───────────┐         ┌───────────────┐         ┌───────────────────┐
- │ Define     │ ──────> │ Interactions  │ ──────> │ Replay against    │
- │ expected   │ generate│ as JSON       │ verify  │ real provider API │
- │ requests & │         │               │         │                   │
- │ responses  │         └───────────────┘         └───────────────────┘
+ │ Визначити │ ──────> │ Взаємодії     │ ──────> │ Відтворити проти  │
+ │ очікувані │ генер.  │ у форматі     │ вериф.  │ реального API     │
+ │ запити та │         │ JSON          │         │ постачальника     │
+ │ відповіді │         └───────────────┘         └───────────────────┘
  └───────────┘
 ```
 
-### Provider States
+### Стани постачальника
 
-Provider states allow the consumer to describe what data should exist on the provider side before an interaction runs. For example:
+Стани постачальника дозволяють споживачу описати, які дані мають існувати на стороні постачальника перед виконанням взаємодії. Наприклад:
 
-- `"an order with id 1 exists"` -- the provider seeds an order with id=1
-- `"no order with id 999 exists"` -- the provider ensures no such order exists
+- `"an order with id 1 exists"` -- постачальник створює замовлення з id=1
+- `"no order with id 999 exists"` -- постачальник гарантує відсутність такого замовлення
 
-The provider test configures a state handler that sets up the required data for each state.
+Тест постачальника налаштовує обробник станів, який підготовлює необхідні дані для кожного стану.
 
-## Tools
+## Інструменти
 
-- Language: C#
-- Contract Testing: [PactNet](https://github.com/pact-foundation/pact-net)
-- Framework: [xUnit v3](https://xunit.net/) (`xunit.v3`)
+- Мова: C#
+- Контрактне тестування: [PactNet](https://github.com/pact-foundation/pact-net)
+- Фреймворк: [xUnit v3](https://xunit.net/) (`xunit.v3`)
 
-## Setup
+## Налаштування
 
 ```bash
 dotnet new sln -n Lab10
@@ -95,14 +95,14 @@ dotnet add Lab10.Consumer.Tests package Shouldly
 dotnet add Lab10.Provider.Tests package Shouldly
 ```
 
-## Scenario
+## Сценарій
 
-You have two microservices:
+У вас є два мікросервіси:
 
-- **Order Service** (provider) — manages orders via REST API
-- **Notification Service** (consumer) — consumes Order Service API to get order details for sending emails
+- **Order Service** (постачальник) — керує замовленнями через REST API
+- **Notification Service** (споживач) — використовує API Order Service для отримання деталей замовлення для надсилання електронних листів
 
-### Example Order Model
+### Приклад моделі замовлення
 
 ```csharp
 public class Order
@@ -122,15 +122,15 @@ public class OrderItem
 }
 ```
 
-### Example API Endpoints (Provider)
+### Приклад ендпоінтів API (постачальник)
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/api/orders/{id}` | Get a single order by ID |
-| `GET` | `/api/orders?customerId={id}` | Get all orders for a customer |
-| `POST` | `/api/orders` | Create a new order |
+| Метод | Ендпоінт | Опис |
+|-------|----------|------|
+| `GET` | `/api/orders/{id}` | Отримати окреме замовлення за ID |
+| `GET` | `/api/orders?customerId={id}` | Отримати всі замовлення клієнта |
+| `POST` | `/api/orders` | Створити нове замовлення |
 
-### Example Consumer Client
+### Приклад клієнта споживача
 
 ```csharp
 public class OrderClient
@@ -161,27 +161,27 @@ public class OrderClient
 }
 ```
 
-## Tasks
+## Завдання
 
-### Task 1 — Consumer-Side Contract Tests
+### Завдання 1 — Контрактні тести на стороні споживача
 
-In `Lab10.Consumer.Tests`, write Pact consumer tests:
+У `Lab10.Consumer.Tests` напишіть контрактні тести Pact для споживача:
 
-1. Define expected interaction for `GET /api/orders/{id}`:
-   - Request: `GET /api/orders/1` with `Accept: application/json`
-   - Expected response: 200 with JSON body containing `id`, `customerEmail`, `items`, `totalAmount`, `status`
+1. Визначте очікувану взаємодію для `GET /api/orders/{id}`:
+   - Запит: `GET /api/orders/1` із `Accept: application/json`
+   - Очікувана відповідь: 200 з JSON-тілом, що містить `id`, `customerEmail`, `items`, `totalAmount`, `status`
 
-2. Define expected interaction for non-existing order:
-   - Request: `GET /api/orders/999`
-   - Expected response: 404
+2. Визначте очікувану взаємодію для неіснуючого замовлення:
+   - Запит: `GET /api/orders/999`
+   - Очікувана відповідь: 404
 
-3. Define expected interaction for `POST /api/orders`:
-   - Request: POST with order JSON body
-   - Expected response: 201 with created order
+3. Визначте очікувану взаємодію для `POST /api/orders`:
+   - Запит: POST з JSON-тілом замовлення
+   - Очікувана відповідь: 201 зі створеним замовленням
 
-4. Generate the Pact file and verify it is created in `pacts/` directory
+4. Згенеруйте файл Pact та перевірте, що він створений у директорії `pacts/`
 
-#### Consumer Test Structure Example
+#### Приклад структури тесту споживача
 
 ```csharp
 public class OrderApiConsumerTests
@@ -233,25 +233,25 @@ public class OrderApiConsumerTests
 }
 ```
 
-> **Hint:** PactNet matchers like `Match.Type(...)`, `Match.Decimal(...)`, and `Match.MinType(...)` let you define flexible contracts. `Match.Type` checks the type rather than the exact value, which makes contracts less brittle.
+> **Підказка:** Матчери PactNet, такі як `Match.Type(...)`, `Match.Decimal(...)` та `Match.MinType(...)`, дозволяють визначити гнучкі контракти. `Match.Type` перевіряє тип, а не точне значення, що робить контракти менш крихкими.
 
-#### Expected Pact File Structure
+#### Очікувана структура файлу Pact
 
-After running the consumer tests, a file like `pacts/NotificationService-OrderService.json` should be created. It contains all defined interactions in JSON format.
+Після запуску тестів споживача має бути створений файл на кшталт `pacts/NotificationService-OrderService.json`. Він містить усі визначені взаємодії у форматі JSON.
 
-### Task 2 — Provider-Side Contract Verification
+### Завдання 2 — Верифікація контракту на стороні постачальника
 
-In `Lab10.Provider.Tests`, verify the provider against the Pact file:
+У `Lab10.Provider.Tests` верифікуйте постачальника проти файлу Pact:
 
-1. Set up `WebApplicationFactory` for the Order Service
-2. Configure provider states:
-   - `"an order with id 1 exists"` — seed test data
-   - `"no order with id 999 exists"` — ensure clean state
-   - `"customer 42 has orders"` — seed customer orders
-3. Run Pact verification and ensure all interactions pass
-4. Test that adding a new required field to the response breaks the contract
+1. Налаштуйте `WebApplicationFactory` для Order Service
+2. Налаштуйте стани постачальника:
+   - `"an order with id 1 exists"` — наповнення тестовими даними
+   - `"no order with id 999 exists"` — забезпечення чистого стану
+   - `"customer 42 has orders"` — наповнення замовленнями клієнта
+3. Запустіть верифікацію Pact та переконайтеся, що всі взаємодії проходять
+4. Перевірте, що додавання нового обов'язкового поля до відповіді порушує контракт
 
-#### Provider Verification Example
+#### Приклад верифікації постачальника
 
 ```csharp
 public class OrderApiProviderTests : IDisposable
@@ -288,12 +288,12 @@ public class OrderApiProviderTests : IDisposable
 }
 ```
 
-> **Hint:** You need to implement a `/provider-states` endpoint (or middleware) in your test server that accepts POST requests from the verifier and sets up the required data. Look at `IStartupFilter` or middleware registration inside `WebApplicationFactory<T>.WithWebHostBuilder(...)`.
+> **Підказка:** Вам потрібно реалізувати ендпоінт `/provider-states` (або проміжне програмне забезпечення) у вашому тестовому сервері, який приймає POST-запити від верифікатора та налаштовує необхідні дані. Зверніть увагу на `IStartupFilter` або реєстрацію проміжного ПЗ всередині `WebApplicationFactory<T>.WithWebHostBuilder(...)`.
 
-#### Provider State Handler Pattern
+#### Шаблон обробника станів постачальника
 
 ```csharp
-// In your test project, add middleware to handle provider states
+// У вашому тестовому проєкті додайте проміжне ПЗ для обробки станів постачальника
 app.MapPost("/provider-states", async (HttpContext context) =>
 {
     var providerState = await context.Request.ReadFromJsonAsync<ProviderState>();
@@ -301,38 +301,38 @@ app.MapPost("/provider-states", async (HttpContext context) =>
     switch (providerState?.State)
     {
         case "an order with id 1 exists":
-            // Seed the database or in-memory store with an order
+            // Наповнити базу даних або in-memory сховище замовленням
             break;
         case "no order with id 999 exists":
-            // Ensure no order with id 999 exists (clean state)
+            // Переконатися, що замовлення з id 999 не існує (чистий стан)
             break;
         case "customer 42 has orders":
-            // Seed multiple orders for customer 42
+            // Наповнити кількома замовленнями для клієнта 42
             break;
     }
 });
 ```
 
-## Grading
+## Оцінювання
 
-| Criteria |
+| Критерії |
 |----------|
-| Task 1 — Consumer contract tests |
-| Task 2 — Provider verification |
+| Завдання 1 — Контрактні тести споживача |
+| Завдання 2 — Верифікація постачальника |
 
-## Submission
+## Здача роботи
 
-- Solution with all four projects
-- Generated Pact files in `pacts/` directory
+- Рішення з усіма чотирма проєктами
+- Згенеровані файли Pact у директорії `pacts/`
 
-## References
+## Посилання
 
-- [PactNet GitHub Repository](https://github.com/pact-foundation/pact-net) -- library source, examples, and README
-- [Pact Documentation (Official)](https://docs.pact.io/) -- comprehensive guides for all Pact implementations
-- [Pact Introduction: 5-Minute Guide](https://docs.pact.io/5-minute-getting-started-guide) -- quick-start tutorial
-- [Consumer-Driven Contract Testing](https://martinfowler.com/articles/consumerDrivenContracts.html) -- Martin Fowler's article on the concept
-- [Contract Testing vs Integration Testing](https://pactflow.io/blog/contract-testing-vs-integration-testing/) -- comparison of approaches
-- [PactNet v5 Migration Guide](https://github.com/pact-foundation/pact-net/blob/master/docs/upgrading-to-5.md) -- if using PactNet v5
-- [xUnit v3 Documentation](https://xunit.net/docs/getting-started/v3/cmdline) -- test framework reference
-- [Shouldly Assertion Library](https://docs.shouldly.org/) -- assertion library used in this lab
-- [ASP.NET Core Integration Testing with WebApplicationFactory](https://learn.microsoft.com/en-us/aspnet/core/test/integration-tests) -- relevant for provider-side setup
+- [PactNet GitHub Repository](https://github.com/pact-foundation/pact-net) -- вихідний код бібліотеки, приклади та README
+- [Pact Documentation (Official)](https://docs.pact.io/) -- повні посібники для всіх реалізацій Pact
+- [Pact Introduction: 5-Minute Guide](https://docs.pact.io/5-minute-getting-started-guide) -- посібник для швидкого старту
+- [Consumer-Driven Contract Testing](https://martinfowler.com/articles/consumerDrivenContracts.html) -- стаття Мартіна Фаулера про концепцію
+- [Contract Testing vs Integration Testing](https://pactflow.io/blog/contract-testing-vs-integration-testing/) -- порівняння підходів
+- [PactNet v5 Migration Guide](https://github.com/pact-foundation/pact-net/blob/master/docs/upgrading-to-5.md) -- при використанні PactNet v5
+- [xUnit v3 Documentation](https://xunit.net/docs/getting-started/v3/cmdline) -- довідник тестового фреймворку
+- [Shouldly Assertion Library](https://docs.shouldly.org/) -- бібліотека тверджень, що використовується в цій лабораторній
+- [ASP.NET Core Integration Testing with WebApplicationFactory](https://learn.microsoft.com/en-us/aspnet/core/test/integration-tests) -- актуально для налаштування на стороні постачальника

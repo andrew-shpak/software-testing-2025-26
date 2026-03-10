@@ -1,32 +1,32 @@
-# Lab 1 — Unit Testing: Fundamentals
+# Лабораторна 1 — Модульне тестування: Основи
 
-## Objective
+## Мета
 
-Learn the basics of unit testing in C#: writing test cases with xUnit v3, using assertions, structuring tests with the Arrange-Act-Assert (AAA) pattern, and achieving meaningful code coverage.
+Вивчити основи модульного тестування в C#: написання тестових випадків за допомогою xUnit v3, використання перевірок (assertions), структурування тестів за шаблоном Arrange-Act-Assert (AAA) та досягнення значущого покриття коду.
 
-**Duration:** 60 minutes
+**Тривалість:** 60 хвилин
 
-## Prerequisites
+## Передумови
 
-- .NET 10+ SDK installed
-- Basic C# knowledge (classes, methods, generics)
-- IDE: Visual Studio / Rider / VS Code with C# extension
+- Встановлений .NET 10+ SDK
+- Базові знання C# (класи, методи, узагальнення)
+- IDE: Visual Studio / Rider / VS Code з розширенням для C#
 
-## Tools
+## Інструменти
 
-- Language: C#
-- Framework: [xUnit v3](https://xunit.net/) (`xunit.v3`)
-- Assertions: `Xunit.Assert` / [Shouldly](https://docs.shouldly.org/)
+- Мова: C#
+- Фреймворк: [xUnit v3](https://xunit.net/) (`xunit.v3`)
+- Перевірки: `Xunit.Assert` / [Shouldly](https://docs.shouldly.org/)
 
-## Key Concepts
+## Ключові поняття
 
-- **Unit test** — a test that verifies a single unit of behavior in isolation
-- **AAA pattern** — Arrange (set up), Act (execute), Assert (verify)
-- **`[Fact]`** — marks a test method with no parameters
-- **`[Theory]`** — marks a data-driven test with `[InlineData]`, `[MemberData]`, or `[ClassData]`
-- **Code coverage** — percentage of code executed during tests
+- **Модульний тест** — тест, що перевіряє одну одиницю поведінки ізольовано
+- **Шаблон AAA** — Arrange (підготовка), Act (виконання), Assert (перевірка)
+- **`[Fact]`** — позначає тестовий метод без параметрів
+- **`[Theory]`** — позначає параметризований тест з `[InlineData]`, `[MemberData]` або `[ClassData]`
+- **Покриття коду** — відсоток коду, що виконується під час тестів
 
-## Setup
+## Налаштування
 
 ```bash
 dotnet new sln -n Lab1
@@ -39,32 +39,32 @@ dotnet add Lab1.Tests package Microsoft.NET.Test.Sdk
 dotnet add Lab1.Tests package Shouldly
 ```
 
-Run tests:
+Запуск тестів:
 
 ```bash
 dotnet test --verbosity normal
 dotnet test --collect:"XPlat Code Coverage"
 ```
 
-## Tasks
+## Завдання
 
-### Task 1 — Calculator
+### Завдання 1 — Калькулятор
 
-Create a `Calculator` class in `Lab1.Core` with methods:
+Створіть клас `Calculator` у `Lab1.Core` з методами:
 
 - `double Add(double a, double b)`
 - `double Subtract(double a, double b)`
 - `double Multiply(double a, double b)`
-- `double Divide(double a, double b)` — throws `DivideByZeroException` when `b == 0`
+- `double Divide(double a, double b)` — кидає `DivideByZeroException`, коли `b == 0`
 
-Write tests in `CalculatorTests.cs` covering:
+Напишіть тести у `CalculatorTests.cs`, що покривають:
 
-1. Normal cases for each operation
-2. Negative numbers
-3. Floating-point precision (`0.1 + 0.2`)
-4. Division by zero throws `DivideByZeroException`
+1. Звичайні випадки для кожної операції
+2. Від'ємні числа
+3. Точність обчислень з плаваючою комою (`0.1 + 0.2`)
+4. Ділення на нуль кидає `DivideByZeroException`
 
-**Example test structure:**
+**Приклад структури тесту:**
 
 ```csharp
 public class CalculatorTests
@@ -101,27 +101,27 @@ public class CalculatorTests
 }
 ```
 
-**Minimum test count:** 8 tests (2 per operation)
+**Мінімальна кількість тестів:** 8 тестів (2 на операцію)
 
-### Task 2 — String Utilities
+### Завдання 2 — Утиліти для рядків
 
-Create a `StringUtils` static class with methods:
+Створіть статичний клас `StringUtils` з методами:
 
-- `string Capitalize(string input)` — capitalizes first letter of each word
-- `string Reverse(string input)` — reverses the string
-- `bool IsPalindrome(string input)` — case-insensitive palindrome check
-- `string Truncate(string input, int maxLength)` — truncates and appends `"..."` if needed
+- `string Capitalize(string input)` — робить першу літеру кожного слова великою
+- `string Reverse(string input)` — перевертає рядок
+- `bool IsPalindrome(string input)` — перевірка на паліндром без урахування регістру
+- `string Truncate(string input, int maxLength)` — обрізає та додає `"..."` за потреби
 
-Write tests covering:
+Напишіть тести, що покривають:
 
-1. Normal inputs
-2. `null` and empty strings (should throw `ArgumentNullException` or return empty)
-3. Single character strings
-4. Unicode and whitespace handling
+1. Звичайні вхідні дані
+2. `null` та порожні рядки (мають кидати `ArgumentNullException` або повертати порожній рядок)
+3. Рядки з одного символу
+4. Обробка Unicode та пробілів
 
-**Expected behaviors:**
+**Очікувана поведінка:**
 
-| Method | Input | Expected Output |
+| Метод | Вхідні дані | Очікуваний результат |
 |--------|-------|-----------------|
 | `Capitalize` | `"hello world"` | `"Hello World"` |
 | `Capitalize` | `"HELLO"` | `"Hello"` |
@@ -131,27 +131,27 @@ Write tests covering:
 | `Truncate` | `"Hello World", 5` | `"Hello..."` |
 | `Truncate` | `"Hi", 10` | `"Hi"` |
 
-**Hint:** Use `[Theory]` with `[InlineData]` for table-driven tests.
+**Підказка:** Використовуйте `[Theory]` з `[InlineData]` для табличних тестів.
 
-**Minimum test count:** 12 tests (3 per method)
+**Мінімальна кількість тестів:** 12 тестів (3 на метод)
 
-## Grading
+## Оцінювання
 
-| Criteria |
+| Критерії |
 |----------|
-| Task 1 — Calculator tests |
-| Task 2 — String utility tests |
-| Test quality (AAA pattern, descriptive names, `[Theory]` usage) |
-| Code coverage ≥ 80% |
+| Завдання 1 — Тести калькулятора |
+| Завдання 2 — Тести утиліт для рядків |
+| Якість тестів (шаблон AAA, описові назви, використання `[Theory]`) |
+| Покриття коду >= 80% |
 
-## Submission
+## Здача роботи
 
-- Solution with `Lab1.Core` and `Lab1.Tests` projects
-- Run `dotnet test --collect:"XPlat Code Coverage"` and include coverage report
-- Minimum 20 total tests across all tasks
+- Рішення з проєктами `Lab1.Core` та `Lab1.Tests`
+- Виконайте `dotnet test --collect:"XPlat Code Coverage"` та додайте звіт про покриття
+- Мінімум 20 тестів загалом по всіх завданнях
 
-## References
+## Посилання
 
-- [xUnit v3 Documentation](https://xunit.net/docs/getting-started/v3/cmdline)
-- [Shouldly Documentation](https://docs.shouldly.org/)
-- [Unit Testing Best Practices — Microsoft](https://learn.microsoft.com/en-us/dotnet/core/testing/unit-testing-best-practices)
+- [Документація xUnit v3](https://xunit.net/docs/getting-started/v3/cmdline)
+- [Документація Shouldly](https://docs.shouldly.org/)
+- [Найкращі практики модульного тестування — Microsoft](https://learn.microsoft.com/en-us/dotnet/core/testing/unit-testing-best-practices)

@@ -1,48 +1,48 @@
-# Lab 5 — Database Testing: Queries and Migrations
+# Лабораторна 5 — Тестування бази даних: Запити та міграції
 
-## Objective
+## Мета
 
-Learn to test database interactions using Entity Framework Core. Write tests for repositories, queries, and migrations using in-memory and SQLite test providers.
+Навчитися тестувати взаємодію з базою даних за допомогою Entity Framework Core. Писати тести для репозиторіїв, запитів та міграцій з використанням тестових провайдерів InMemory та SQLite.
 
-**Duration:** 60 minutes
+**Тривалість:** 60 хвилин
 
-## Prerequisites
+## Передумови
 
-Before starting this lab, make sure you have:
+Перед початком цієї лабораторної переконайтеся, що:
 
-- .NET 10+ SDK installed (`dotnet --version`)
-- Docker installed and running (required for Task 3 with Testcontainers)
-- A working understanding of Entity Framework Core (DbContext, DbSet, migrations, LINQ queries)
-- Familiarity with relational database concepts (foreign keys, unique constraints, cascade delete)
-- Completed Lab 3 and Lab 4 (integration testing fundamentals)
+- Встановлений .NET 10+ SDK (`dotnet --version`)
+- Встановлений та запущений Docker (необхідний для Завдання 3 з Testcontainers)
+- Ви маєте робоче розуміння Entity Framework Core (DbContext, DbSet, міграції, LINQ-запити)
+- Ви знайомі з концепціями реляційних баз даних (зовнішні ключі, унікальні обмеження, каскадне видалення)
+- Виконані Лабораторна 3 та Лабораторна 4 (основи інтеграційного тестування)
 
-## Key Concepts
+## Ключові поняття
 
-### EF Core InMemory Provider
+### Провайдер EF Core InMemory
 
-The InMemory provider (`Microsoft.EntityFrameworkCore.InMemory`) is the fastest option for testing basic CRUD and LINQ queries. However, it does **not** enforce relational constraints (foreign keys, unique indexes, cascade deletes). Use it for logic-level tests only.
+Провайдер InMemory (`Microsoft.EntityFrameworkCore.InMemory`) є найшвидшим варіантом для тестування базових CRUD-операцій та LINQ-запитів. Однак він **не** забезпечує реляційних обмежень (зовнішні ключі, унікальні індекси, каскадне видалення). Використовуйте його лише для тестів на рівні логіки.
 
-### SQLite In-Memory Mode
+### SQLite у режимі пам'яті
 
-SQLite in-memory mode (`DataSource=:memory:`) provides a real relational database engine that enforces foreign keys, unique constraints, and cascades. The database lives only as long as the connection is open, making cleanup automatic. This is ideal for constraint-level tests.
+SQLite у режимі пам'яті (`DataSource=:memory:`) надає реальний реляційний двигун бази даних, що забезпечує зовнішні ключі, унікальні обмеження та каскади. База даних існує лише доки з'єднання відкрите, що робить очищення автоматичним. Це ідеальний варіант для тестів на рівні обмежень.
 
 ### Testcontainers
 
-Testcontainers spins up a real database server (SQL Server, PostgreSQL, etc.) inside a Docker container for each test class. This gives you full database behavior including stored procedures, raw SQL, and provider-specific query semantics. Tests using Testcontainers are slower but provide the highest fidelity.
+Testcontainers запускає реальний сервер бази даних (SQL Server, PostgreSQL тощо) у Docker-контейнері для кожного тестового класу. Це дає повну поведінку бази даних, включаючи збережені процедури, сирий SQL та семантику запитів, специфічну для провайдера. Тести з Testcontainers повільніші, але забезпечують найвищу точність.
 
-### Database Name Isolation
+### Ізоляція за назвою бази даних
 
-When using the InMemory provider, each test should use a unique database name (e.g., via `Guid.NewGuid().ToString()`) to prevent shared state across tests. With SQLite, create a fresh connection per test. With Testcontainers, use `IAsyncLifetime` to start/stop the container.
+При використанні провайдера InMemory кожен тест повинен використовувати унікальну назву бази даних (наприклад, через `Guid.NewGuid().ToString()`), щоб запобігти спільному стану між тестами. З SQLite створюйте нове з'єднання для кожного тесту. З Testcontainers використовуйте `IAsyncLifetime` для запуску/зупинки контейнера.
 
-## Tools
+## Інструменти
 
-- Language: C#
+- Мова: C#
 - ORM: [Entity Framework Core](https://learn.microsoft.com/en-us/ef/core/)
-- Test DB: `Microsoft.EntityFrameworkCore.InMemory` / `Microsoft.EntityFrameworkCore.Sqlite`
-- Containers: [Testcontainers for .NET](https://dotnet.testcontainers.org/)
-- Framework: [xUnit v3](https://xunit.net/) (`xunit.v3`)
+- Тестова БД: `Microsoft.EntityFrameworkCore.InMemory` / `Microsoft.EntityFrameworkCore.Sqlite`
+- Контейнери: [Testcontainers для .NET](https://dotnet.testcontainers.org/)
+- Фреймворк: [xUnit v3](https://xunit.net/) (`xunit.v3`)
 
-## Setup
+## Налаштування
 
 ```bash
 dotnet new sln -n Lab5
@@ -61,11 +61,11 @@ dotnet add Lab5.Tests package Microsoft.EntityFrameworkCore.SqlServer
 dotnet add Lab5.Tests package Shouldly
 ```
 
-## Tasks
+## Завдання
 
-### Task 1 — DbContext and Repository Tests with InMemory Provider
+### Завдання 1 — Тести DbContext та репозиторію з провайдером InMemory
 
-Create an `AppDbContext` with the following entities:
+Створіть `AppDbContext` з наступними сутностями:
 
 ```csharp
 public class Student
@@ -96,25 +96,25 @@ public class Enrollment
 }
 ```
 
-Create a `StudentRepository` with methods:
+Створіть `StudentRepository` з методами:
 
-- `GetByIdAsync(int id)` — includes enrollments
-- `GetAllAsync()` — returns all students
+- `GetByIdAsync(int id)` — включає реєстрації
+- `GetAllAsync()` — повертає всіх студентів
 - `AddAsync(Student student)`
 - `UpdateAsync(Student student)`
 - `DeleteAsync(int id)`
-- `GetTopStudentsAsync(int count)` — students with highest average grade
+- `GetTopStudentsAsync(int count)` — студенти з найвищим середнім балом
 
-Write tests using `InMemoryDatabase`:
+Напишіть тести з використанням `InMemoryDatabase`:
 
-1. Test all CRUD operations
-2. Test navigation properties are loaded correctly
-3. Test `GetTopStudentsAsync` returns correct ordering
-4. Each test uses a unique database name for isolation
+1. Протестуйте всі CRUD-операції
+2. Протестуйте, що навігаційні властивості завантажуються правильно
+3. Протестуйте, що `GetTopStudentsAsync` повертає правильне впорядкування
+4. Кожен тест використовує унікальну назву бази даних для ізоляції
 
-**Minimum test count: 6 tests**
+**Мінімальна кількість тестів: 6 тестів**
 
-#### Example: InMemory Provider Setup
+#### Приклад: Налаштування провайдера InMemory
 
 ```csharp
 private AppDbContext CreateInMemoryContext()
@@ -128,7 +128,7 @@ private AppDbContext CreateInMemoryContext()
 }
 ```
 
-#### Example: Repository Tests with Shouldly
+#### Приклад: Тести репозиторію з Shouldly
 
 ```csharp
 [Fact]
@@ -228,11 +228,11 @@ public async Task GetTopStudentsAsync_ReturnsOrderedByAverageGradeAsync()
 }
 ```
 
-> **Hint:** Use `Guid.NewGuid().ToString()` as the InMemory database name to guarantee isolation. Remember that InMemory does not support `Include()` the same way a relational provider does -- navigation properties are loaded if they were tracked in the same context, but `Include()` does not fail.
+> **Підказка:** Використовуйте `Guid.NewGuid().ToString()` як назву бази даних InMemory для гарантії ізоляції. Пам'ятайте, що InMemory не підтримує `Include()` так само, як реляційний провайдер — навігаційні властивості завантажуються, якщо вони відстежувалися в тому ж контексті, але `Include()` не завершується помилкою.
 
-### Task 2 — SQLite Provider for Relational Tests
+### Завдання 2 — Провайдер SQLite для реляційних тестів
 
-Some behaviors (foreign keys, constraints) are not enforced by InMemory provider. Rewrite key tests using SQLite in-memory mode:
+Деякі поведінки (зовнішні ключі, обмеження) не забезпечуються провайдером InMemory. Перепишіть ключові тести з використанням SQLite у режимі пам'яті:
 
 ```csharp
 var connection = new SqliteConnection("DataSource=:memory:");
@@ -240,17 +240,17 @@ connection.Open();
 options.UseSqlite(connection);
 ```
 
-Write tests that:
+Напишіть тести, що:
 
-1. Verify foreign key constraint — enrolling a student in a non-existing course fails
-2. Verify unique constraint on `Student.Email`
-3. Test cascade delete — deleting a student removes their enrollments
-4. Test that concurrent updates are handled (optimistic concurrency)
-5. Compare behavior differences between InMemory and SQLite providers (document in comments)
+1. Перевіряють обмеження зовнішнього ключа — реєстрація студента на неіснуючий курс завершується помилкою
+2. Перевіряють унікальне обмеження на `Student.Email`
+3. Тестують каскадне видалення — видалення студента видаляє його реєстрації
+4. Тестують обробку конкурентних оновлень (оптимістична конкурентність)
+5. Порівнюють відмінності поведінки між провайдерами InMemory та SQLite (задокументуйте в коментарях)
 
-**Minimum test count: 5 tests**
+**Мінімальна кількість тестів: 5 тестів**
 
-#### Example: SQLite Provider Setup
+#### Приклад: Налаштування провайдера SQLite
 
 ```csharp
 private (AppDbContext context, SqliteConnection connection) CreateSqliteContext()
@@ -268,7 +268,7 @@ private (AppDbContext context, SqliteConnection connection) CreateSqliteContext(
 }
 ```
 
-#### Example: Constraint Tests with Shouldly
+#### Приклад: Тести обмежень з Shouldly
 
 ```csharp
 [Fact]
@@ -355,23 +355,23 @@ public async Task CascadeDelete_DeletingStudent_RemovesEnrollmentsAsync()
 }
 ```
 
-#### Provider Comparison Table
+#### Таблиця порівняння провайдерів
 
-| Behavior | InMemory | SQLite | SQL Server |
+| Поведінка | InMemory | SQLite | SQL Server |
 |---|---|---|---|
-| Foreign key enforcement | No | Yes | Yes |
-| Unique constraints | No | Yes | Yes |
-| Cascade delete | Manual | Yes | Yes |
-| Transactions | No (no-op) | Yes | Yes |
-| Raw SQL / stored procedures | No | Limited | Full |
-| Auto-increment behavior | Sequential | Sequential | Identity |
-| `LIKE` case sensitivity | C# default | Case-insensitive | Depends on collation |
+| Забезпечення зовнішніх ключів | Ні | Так | Так |
+| Унікальні обмеження | Ні | Так | Так |
+| Каскадне видалення | Вручну | Так | Так |
+| Транзакції | Ні (без ефекту) | Так | Так |
+| Сирий SQL / збережені процедури | Ні | Обмежено | Повністю |
+| Поведінка автоінкременту | Послідовна | Послідовна | Identity |
+| Чутливість `LIKE` до регістру | За замовчуванням C# | Без урахування регістру | Залежить від порівняння |
 
-> **Hint:** Remember to configure cascade delete in `OnModelCreating` using `.OnDelete(DeleteBehavior.Cascade)`. SQLite requires `PRAGMA foreign_keys = ON` which EF Core enables by default on its connections.
+> **Підказка:** Не забудьте налаштувати каскадне видалення в `OnModelCreating` за допомогою `.OnDelete(DeleteBehavior.Cascade)`. SQLite вимагає `PRAGMA foreign_keys = ON`, що EF Core вмикає за замовчуванням для своїх з'єднань.
 
-### Task 3 — Testcontainers with Real Database
+### Завдання 3 — Testcontainers з реальною базою даних
 
-Use Testcontainers to spin up a real SQL Server instance in Docker for tests:
+Використовуйте Testcontainers для запуску реального екземпляра SQL Server у Docker для тестів:
 
 ```csharp
 private readonly MsSqlContainer _dbContainer = new MsSqlBuilder()
@@ -383,19 +383,19 @@ await _dbContainer.StartAsync();
 var connectionString = _dbContainer.GetConnectionString();
 ```
 
-Write tests that:
+Напишіть тести, що:
 
-1. Run all CRUD operations against a real SQL Server container
-2. Verify foreign key constraints are enforced (compare with InMemory behavior)
-3. Test stored procedure or raw SQL query execution
-4. Verify that EF migrations apply cleanly to a fresh database
-5. Compare query behavior between SQLite and SQL Server (document differences)
+1. Виконують усі CRUD-операції на реальному контейнері SQL Server
+2. Перевіряють, що обмеження зовнішніх ключів забезпечуються (порівняйте з поведінкою InMemory)
+3. Тестують виконання збережених процедур або сирих SQL-запитів
+4. Перевіряють, що міграції EF застосовуються чисто до нової бази даних
+5. Порівнюють поведінку запитів між SQLite та SQL Server (задокументуйте відмінності)
 
-**Minimum test count: 4 tests**
+**Мінімальна кількість тестів: 4 тести**
 
-> **Prerequisite**: Docker must be installed and running.
+> **Передумова**: Docker повинен бути встановлений та запущений.
 
-#### Example: Testcontainers Setup with IAsyncLifetime
+#### Приклад: Налаштування Testcontainers з IAsyncLifetime
 
 ```csharp
 public class SqlServerTests : IAsyncLifetime
@@ -487,30 +487,30 @@ public class SqlServerTests : IAsyncLifetime
 }
 ```
 
-> **Hint:** Testcontainers tests are slower (container startup takes 10-30 seconds). Use `IAsyncLifetime` at the class level and share the container across tests within the same class. Mark these tests with `[Trait("Category", "Integration")]` so they can be filtered during local development.
+> **Підказка:** Тести з Testcontainers повільніші (запуск контейнера займає 10-30 секунд). Використовуйте `IAsyncLifetime` на рівні класу та спільний контейнер для тестів у межах одного класу. Позначайте ці тести `[Trait("Category", "Integration")]`, щоб їх можна було фільтрувати під час локальної розробки.
 
-## Grading
+## Оцінювання
 
-| Criteria |
+| Критерії |
 |----------|
-| Task 1 — InMemory repository tests |
-| Task 2 — SQLite relational tests |
-| Task 3 — Testcontainers tests |
-| Test isolation and proper async patterns |
+| Завдання 1 — Тести репозиторію з InMemory |
+| Завдання 2 — Реляційні тести з SQLite |
+| Завдання 3 — Тести з Testcontainers |
+| Ізоляція тестів та правильні асинхронні шаблони |
 
-## Submission
+## Здача роботи
 
-- Solution with `Lab5.Data` and `Lab5.Tests` projects
-- Both InMemory and SQLite test classes
+- Рішення з проєктами `Lab5.Data` та `Lab5.Tests`
+- Тестові класи для InMemory та SQLite
 
-## References
+## Посилання
 
-- [EF Core Testing Overview](https://learn.microsoft.com/en-us/ef/core/testing/) — official guide to choosing a testing strategy
-- [Testing with the InMemory Provider](https://learn.microsoft.com/en-us/ef/core/testing/testing-without-the-database#inmemory-provider) — limitations and usage
-- [Testing with SQLite](https://learn.microsoft.com/en-us/ef/core/testing/testing-without-the-database#sqlite-in-memory) — in-memory mode setup
-- [Testcontainers for .NET](https://dotnet.testcontainers.org/) — container-based test infrastructure
-- [Testcontainers SQL Server Module](https://dotnet.testcontainers.org/modules/mssql/) — SQL Server container configuration
-- [xUnit v3 Documentation](https://xunit.net/docs/getting-started/v3/cmdline) — test framework reference
-- [Shouldly Documentation](https://docs.shouldly.org/) — assertion library API
-- [EF Core Relationships](https://learn.microsoft.com/en-us/ef/core/modeling/relationships) — configuring foreign keys, cascade delete
-- [EF Core Raw SQL Queries](https://learn.microsoft.com/en-us/ef/core/querying/sql-queries) — `FromSqlRaw`, `ExecuteSqlRawAsync`
+- [Огляд тестування EF Core](https://learn.microsoft.com/en-us/ef/core/testing/) — офіційний посібник з вибору стратегії тестування
+- [Тестування з провайдером InMemory](https://learn.microsoft.com/en-us/ef/core/testing/testing-without-the-database#inmemory-provider) — обмеження та використання
+- [Тестування з SQLite](https://learn.microsoft.com/en-us/ef/core/testing/testing-without-the-database#sqlite-in-memory) — налаштування режиму пам'яті
+- [Testcontainers для .NET](https://dotnet.testcontainers.org/) — тестова інфраструктура на основі контейнерів
+- [Модуль Testcontainers для SQL Server](https://dotnet.testcontainers.org/modules/mssql/) — конфігурація контейнера SQL Server
+- [Документація xUnit v3](https://xunit.net/docs/getting-started/v3/cmdline) — довідник тестового фреймворку
+- [Документація Shouldly](https://docs.shouldly.org/) — API бібліотеки перевірок
+- [Зв'язки в EF Core](https://learn.microsoft.com/en-us/ef/core/modeling/relationships) — налаштування зовнішніх ключів, каскадне видалення
+- [Сирі SQL-запити в EF Core](https://learn.microsoft.com/en-us/ef/core/querying/sql-queries) — `FromSqlRaw`, `ExecuteSqlRawAsync`

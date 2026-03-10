@@ -1,8 +1,8 @@
-# Lecture 6: Test Design Techniques and Code Coverage
+# Лекція 6: Техніки проєктування тестів та покриття коду
 
-## Learning Objectives
+## Навчальні цілі
 
-By the end of this lecture, students will be able to:
+Після завершення цієї лекції студенти зможуть:
 
 - Explain why systematic test design is superior to ad-hoc testing
 - Apply black-box test design techniques: equivalence partitioning, boundary value analysis, decision tables, state transition testing, and pairwise testing
@@ -14,9 +14,9 @@ By the end of this lecture, students will be able to:
 
 ---
 
-## 1. Why Systematic Test Design Matters
+## 1. Чому систематичне проєктування тестів має значення
 
-### 1.1 Ad-Hoc Testing vs. Systematic Testing
+### 1.1 Ad-Hoc тестування vs. Систематичне тестування
 
 When developers write tests without a method, they tend to test only the cases they thought of while coding — the "happy path" and a few obvious errors. This is **ad-hoc testing**, and it leaves large gaps.
 
@@ -29,7 +29,7 @@ When developers write tests without a method, they tend to test only the cases t
 | Duplicate effort — same areas tested repeatedly | Minimizes redundancy, maximizes fault detection |
 | Results vary by tester | Results are reproducible and reviewable |
 
-### 1.2 The Fundamental Problem
+### 1.2 Фундаментальна проблема
 
 Recall from Lecture 1: **exhaustive testing is impossible**. Even a simple function with two `int` parameters has 2^32 x 2^32 = 2^64 possible input combinations — roughly 18.4 quintillion test cases.
 
@@ -46,7 +46,7 @@ Systematic selection: █ █ █ █ █ █ █ █ █ █ █ █ █ █ �
                       (structured, representative, boundary-focused)
 ```
 
-### 1.3 Two Families of Techniques
+### 1.3 Дві родини технік
 
 Test design techniques fall into two broad categories:
 
@@ -76,26 +76,26 @@ Both are needed. Black-box techniques test *what* the software does; white-box t
 
 ---
 
-## 2. Black-Box Test Design Techniques
+## 2. Техніки проєктування тестів методом чорної скриньки
 
-Black-box techniques treat the system under test as an opaque box: you know the inputs and expected outputs, but not the internal implementation.
+Техніки чорної скриньки розглядають систему, що тестується, як непрозору коробку: ви знаєте вхідні дані та очікувані результати, але не внутрішню реалізацію.
 
-### 2.1 Equivalence Partitioning (EP)
+### 2.1 Еквівалентне розбиття (EP)
 
-#### The Idea
+#### Ідея
 
 Inputs to a system can be divided into groups (partitions) where all values in a group are expected to be treated the same way. If one value in a partition works correctly, we assume all values in that partition will work correctly.
 
 This lets us replace millions of test cases with one representative per partition.
 
-#### How to Apply
+#### Як застосовувати
 
 1. Identify the input domain
 2. Divide inputs into **valid** and **invalid** equivalence partitions
 3. Select one representative value from each partition
 4. Write a test case for each representative
 
-#### Example: Age-Based Ticket Pricing
+#### Приклад: Ціноутворення квитків за віком
 
 **Specification:** A cinema charges different prices based on age:
 - Under 5: Free
@@ -176,20 +176,20 @@ public class PriceCalculatorTests
 
 **Number of test cases:** 6 (one per partition) instead of testing every possible age.
 
-### 2.2 Boundary Value Analysis (BVA)
+### 2.2 Аналіз граничних значень (BVA)
 
-#### The Idea
+#### Ідея
 
 Defects tend to cluster at the **boundaries** between equivalence partitions. Boundary value analysis focuses on the edges — the minimum, maximum, and values just inside and just outside each boundary.
 
-#### Two-Value vs. Three-Value BVA
+#### Двозначний vs. Тризначний BVA
 
 | Approach | Values tested at each boundary | ISTQB standard |
 |---|---|---|
 | **Two-value BVA** | boundary value, boundary + 1 | Yes (minimum) |
 | **Three-value BVA** | boundary - 1, boundary, boundary + 1 | Yes (thorough) |
 
-#### Example: Continuing the Ticket Pricing
+#### Приклад: Продовження ціноутворення квитків
 
 Boundaries are at ages: 0, 4/5, 12/13, 17/18, 64/65.
 
@@ -271,20 +271,20 @@ public class PriceCalculatorBoundaryTests
 
 > **Key insight:** Equivalence partitioning and boundary value analysis are complementary. EP identifies the partitions; BVA focuses testing effort on the edges where bugs hide.
 
-### 2.3 Decision Table Testing
+### 2.3 Тестування за таблицею рішень
 
-#### The Idea
+#### Ідея
 
 When system behavior depends on **combinations of conditions**, a decision table enumerates all combinations and their expected outcomes. This is especially useful for business rules with multiple interacting conditions.
 
-#### How to Build a Decision Table
+#### Як побудувати таблицю рішень
 
 1. List all conditions (inputs)
 2. List all actions (outputs/behaviors)
 3. Create columns for each combination of condition values
 4. Fill in the expected action for each combination
 
-#### Example: Loan Approval System
+#### Приклад: Система схвалення кредитів
 
 **Specification:** A bank approves loans based on three conditions:
 - Credit score: Good or Bad
@@ -381,13 +381,13 @@ public class LoanEvaluatorTests
 
 **When to use:** Decision tables are ideal when the specification contains complex business rules with multiple interacting conditions (2-4 conditions). With *n* boolean conditions, there are 2^n rules — the table grows exponentially, so it works best for a moderate number of conditions.
 
-### 2.4 State Transition Testing
+### 2.4 Тестування переходів станів
 
-#### The Idea
+#### Ідея
 
 Many systems have behavior that depends on their **current state** and the **event** that occurs. State transition testing models these as a state machine and derives tests to cover transitions.
 
-#### Components of a State Model
+#### Компоненти моделі станів
 
 ```
 ┌───────────┐   event [condition] / action   ┌───────────┐
@@ -401,7 +401,7 @@ Many systems have behavior that depends on their **current state** and the **eve
 - **Guards:** conditions that must be true for a transition to fire
 - **Actions:** operations performed during a transition
 
-#### Example: Order Lifecycle
+#### Приклад: Життєвий цикл замовлення
 
 ```
                     ┌──────────────────────────────────────────────┐
@@ -599,7 +599,7 @@ public class OrderStateTransitionTests
 }
 ```
 
-#### Coverage Levels for State Transition Testing
+#### Рівні покриття для тестування переходів станів
 
 | Level | What it covers | Minimum tests |
 |---|---|---|
@@ -608,9 +608,9 @@ public class OrderStateTransitionTests
 | **All transition pairs (1-switch)** | Every pair of consecutive transitions | More tests |
 | **Invalid transitions** | Every event from every state where it is not allowed | Many negative tests |
 
-### 2.5 Pairwise (Combinatorial) Testing
+### 2.5 Попарне (комбінаторне) тестування
 
-#### The Problem
+#### Проблема
 
 When a system has multiple input parameters, testing all combinations grows exponentially:
 
@@ -621,14 +621,14 @@ When a system has multiple input parameters, testing all combinations grows expo
 | 5 | 4 | 1,024 |
 | 10 | 3 | 59,049 |
 
-#### The Insight
+#### Ключове спостереження
 
 Most defects are triggered by the interaction of **two** parameters (pairwise), not three or more. Studies by Kuhn, Wallace, and Gallo (NIST) found that:
 - 70% of defects involve a single parameter
 - 90% of defects are triggered by pairwise interactions
 - 98% of defects are triggered by interactions of three or fewer parameters
 
-#### How Pairwise Testing Works
+#### Як працює попарне тестування
 
 Instead of testing all combinations, pairwise testing generates a **minimal set of test cases** that covers every pair of parameter values at least once.
 
@@ -655,7 +655,7 @@ Pairwise set (covers all pairs):
 
 **9 test cases** instead of 18 — and every pair of values appears at least once. For larger parameter spaces, the reduction is dramatic.
 
-#### Tools for Pairwise Test Generation
+#### Інструменти для генерації попарних тестів
 
 - **PICT** (Microsoft, open-source): command-line tool for pairwise generation
 - **AllPairs** by James Bach
@@ -704,11 +704,11 @@ public class SearchPairwiseTests
 
 ---
 
-## 3. White-Box Test Design Techniques
+## 3. Техніки проєктування тестів методом білої скриньки
 
-White-box techniques use knowledge of the code's internal structure to design tests. The goal is to ensure that specific structural elements are exercised during testing.
+Техніки білої скриньки використовують знання внутрішньої структури коду для проєктування тестів. Мета — забезпечити, щоб конкретні структурні елементи були задіяні під час тестування.
 
-### 3.1 Control Flow Graph (CFG)
+### 3.1 Граф потоку управління (CFG)
 
 Before discussing coverage criteria, we need to understand control flow graphs — visual representations of all paths through a function.
 
@@ -759,9 +759,9 @@ Control Flow Graph:
               [11: Exit]
 ```
 
-### 3.2 Statement Coverage
+### 3.2 Покриття операторів
 
-#### Definition
+#### Визначення
 
 **Statement coverage** measures the percentage of executable statements that are exercised by the test suite.
 
@@ -771,7 +771,7 @@ Statement Coverage = ───────────────────�
                      Total executable statements
 ```
 
-#### Example
+#### Приклад
 
 ```csharp
 public decimal CalculateDiscount(decimal price, bool isMember, int quantity)
@@ -809,7 +809,7 @@ This single test executes all 6 statements — 100% statement coverage. But it m
 
 ### 3.3 Branch (Decision) Coverage
 
-#### Definition
+#### Визначення
 
 **Branch coverage** measures the percentage of branches (decision outcomes) that are exercised. Every `if`, `else`, `switch case`, loop entry/exit counts as a decision.
 
@@ -819,7 +819,7 @@ Branch Coverage = ────────────────────�
                    Total branches
 ```
 
-#### Example (same code)
+#### Приклад (same code)
 
 The code has 4 branches:
 - `if (isMember)` — true branch and false branch
@@ -867,11 +867,11 @@ Path Coverage (strongest)
 
 ### 3.4 Condition Coverage
 
-#### Definition
+#### Визначення
 
 **Condition coverage** measures whether each individual boolean sub-expression (atomic condition) in a decision has been evaluated to both `true` and `false`.
 
-#### Example
+#### Приклад
 
 ```csharp
 if (age >= 18 && hasConsent)    // Two atomic conditions: (age >= 18), (hasConsent)
@@ -893,7 +893,7 @@ To address this, we often use **condition/decision coverage** — requiring both
 
 ### 3.5 MC/DC (Modified Condition/Decision Coverage)
 
-#### Definition
+#### Визначення
 
 MC/DC requires that:
 1. Every entry and exit point is invoked
@@ -907,7 +907,7 @@ Point 4 is the key: for each condition, there must be two test cases where that 
 
 MC/DC is required by **DO-178C** (avionics software safety standard) for Level A (catastrophic failure consequences). It provides strong confidence that each condition genuinely contributes to the logic.
 
-#### Example
+#### Приклад
 
 ```csharp
 if (engineRunning && fuelAboveMinimum && noWarningLights)
@@ -931,11 +931,11 @@ Only **4 test cases** for 3 conditions (N+1 in the best case), compared to 8 for
 
 ### 3.6 Path Coverage
 
-#### Definition
+#### Визначення
 
 **Path coverage** requires that every possible path through the function is exercised. A path is a unique sequence of statements from entry to exit.
 
-#### Example
+#### Приклад
 
 ```csharp
 public decimal CalculateDiscount(decimal price, bool isMember, int quantity)
@@ -974,7 +974,7 @@ public void CalculateDiscount_AllPaths_ReturnsExpectedAmount(
 }
 ```
 
-#### The Problem with Path Coverage
+#### Проблема with Path Coverage
 
 For code with loops, path coverage can be **infinite**:
 
@@ -1679,7 +1679,7 @@ Configuration / startup       60%+               Integration tests
 
 ## 9. Summary
 
-### Key Takeaways
+### Ключові висновки
 
 1. **Systematic test design** is superior to ad-hoc testing — it provides rationale, repeatability, and measurable completeness
 2. **Black-box techniques** derive tests from specifications:
@@ -1698,7 +1698,7 @@ Configuration / startup       60%+               Integration tests
 6. **Combine techniques** — start with black-box tests from the spec, measure coverage, then add white-box tests for gaps
 7. **Integrate coverage into CI** to prevent regression and track trends over time
 
-### Preview of Next Lecture
+### Анонс наступної лекції
 
 In **Lecture 7: CI/CD and Test Management**, we will:
 - Set up GitHub Actions to run tests automatically on every push
@@ -1709,7 +1709,7 @@ In **Lecture 7: CI/CD and Test Management**, we will:
 
 ---
 
-## References and Further Reading
+## Посилання та додаткова література
 
 - **ISTQB Foundation Level Syllabus** (v4.0, 2023) — Chapters 4 (Test Design Techniques)
   - https://www.istqb.org/certifications/certified-tester-foundation-level

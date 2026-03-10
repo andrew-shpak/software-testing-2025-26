@@ -1,48 +1,48 @@
-# Tasks
+# Завдання
 
-Individual project topics for the Software Testing course.
+Теми індивідуальних проєктів з курсу тестування програмного забезпечення.
 
-| #  | Topic                        |
-|----|------------------------------|
-| 1  | Book Store                   |
-| 2  | Movie Library                |
-| 3  | Recipe Manager               |
-| 4  | Task Tracker                 |
-| 5  | Pet Clinic                   |
-| 6  | Parking Lot                  |
-| 7  | Hotel Booking                |
-| 8  | Flight Reservation           |
-| 9  | Music Playlist               |
-| 10 | Blog Platform                |
-| 11 | E-Commerce Cart              |
-| 12 | Inventory System             |
-| 13 | Student Gradebook            |
-| 14 | Fitness Tracker              |
-| 15 | Weather Station              |
-| 16 | Event Ticketing              |
-| 17 | Library Management           |
-| 18 | Restaurant Menu              |
-| 19 | Job Board                    |
-| 20 | Real Estate Listings         |
-| 21 | Hospital Patient Management  |
-| 22 | Car Dealership               |
-| 23 | Online Quiz                  |
-| 24 | Expense Tracker              |
-| 25 | Chat Room                    |
-| 26 | News Aggregator              |
-| 27 | Subscription Service         |
-| 28 | Auction Platform             |
-| 29 | Sports League                |
-| 30 | Warehouse Management         |
-| 31 | Appointment Scheduler        |
-| 32 | Donation Platform            |
-| 33 | Survey Builder               |
-| 34 | Loyalty Program              |
-| 35 | Document Manager             |
-| 36 | Feedback System              |
-| 37 | Product Review               |
-| 38 | Courier Service              |
-| 39 | Voting System                |
-| 40 | Equipment Rental             |
-| 41 | Garden Planner               |
-| 42 | Pharmacy Store               |
+| #  | Тема                                  |
+|----|---------------------------------------|
+| 1  | Книжковий магазин                     |
+| 2  | Бібліотека фільмів                    |
+| 3  | Менеджер рецептів                     |
+| 4  | Трекер завдань                        |
+| 5  | Ветеринарна клініка                   |
+| 6  | Парковка                              |
+| 7  | Бронювання готелю                     |
+| 8  | Резервування авіарейсів               |
+| 9  | Музичний плейлист                     |
+| 10 | Блог-платформа                        |
+| 11 | Кошик електронної комерції            |
+| 12 | Система інвентаризації                |
+| 13 | Журнал оцінок студентів               |
+| 14 | Фітнес-трекер                         |
+| 15 | Метеостанція                          |
+| 16 | Продаж квитків на події               |
+| 17 | Управління бібліотекою                |
+| 18 | Меню ресторану                        |
+| 19 | Дошка вакансій                        |
+| 20 | Каталог нерухомості                   |
+| 21 | Управління пацієнтами лікарні         |
+| 22 | Автосалон                             |
+| 23 | Онлайн-вікторина                      |
+| 24 | Трекер витрат                         |
+| 25 | Чат-кімната                           |
+| 26 | Агрегатор новин                       |
+| 27 | Сервіс підписок                       |
+| 28 | Аукціонна платформа                   |
+| 29 | Спортивна ліга                        |
+| 30 | Управління складом                    |
+| 31 | Планувальник зустрічей                |
+| 32 | Платформа пожертвувань                |
+| 33 | Конструктор опитувань                 |
+| 34 | Програма лояльності                   |
+| 35 | Менеджер документів                   |
+| 36 | Система зворотного зв'язку            |
+| 37 | Огляд продуктів                       |
+| 38 | Кур'єрська служба                     |
+| 39 | Система голосування                   |
+| 40 | Оренда обладнання                     |
+| 41 | Планувальник саду                     |
+| 42 | Аптека                                |

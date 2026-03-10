@@ -1,42 +1,42 @@
-# Lab 8 — Performance Testing: Profiling and Benchmarks
+# Лабораторна 8 — Тестування продуктивності: профілювання та бенчмарки
 
-## Objective
+## Мета
 
-Learn to write microbenchmarks for C# code, profile memory allocations, and identify performance hotspots using BenchmarkDotNet.
+Навчитися писати мікробенчмарки для коду C#, профілювати виділення пам'яті та знаходити вузькі місця продуктивності за допомогою BenchmarkDotNet.
 
-**Duration:** 60 minutes
+**Тривалість:** 60 хвилин
 
-## Prerequisites
+## Передумови
 
-- .NET 10 SDK or later installed
-- C# fundamentals including generics, LINQ, async/await, and `Span<T>`
-- Understanding of value types vs reference types in .NET
-- Familiarity with the .NET garbage collector (Gen0 / Gen1 / Gen2 collections)
-- `dotnet-counters` and `dotnet-trace` CLI tools installed (`dotnet tool install -g dotnet-counters` and `dotnet tool install -g dotnet-trace`)
-- Benchmarks **must** be run in Release mode for valid results
+- Встановлений .NET 10 SDK або новіший
+- Основи C#, включаючи узагальнення, LINQ, async/await та `Span<T>`
+- Розуміння типів значень та посилальних типів у .NET
+- Знайомство зі збирачем сміття .NET (колекції Gen0 / Gen1 / Gen2)
+- Встановлені інструменти CLI `dotnet-counters` та `dotnet-trace` (`dotnet tool install -g dotnet-counters` та `dotnet tool install -g dotnet-trace`)
+- Бенчмарки **повинні** запускатися в режимі Release для отримання валідних результатів
 
-## Key Concepts
+## Ключові концепції
 
-| Concept | Description |
-|---------|-------------|
-| **Microbenchmark** | A focused measurement of a single, isolated operation (e.g., one method call). BenchmarkDotNet handles warm-up, iteration counts, and statistical analysis automatically. |
-| **MemoryDiagnoser** | A BenchmarkDotNet diagnoser that reports allocated bytes and GC collections per operation. Essential for finding hidden allocations. |
-| **Warm-up** | The initial iterations that are discarded so the JIT compiler has time to optimize the code. BenchmarkDotNet does this automatically. |
-| **Baseline** | The benchmark method marked with `[Benchmark(Baseline = true)]`. All other methods in the class are compared to it, showing a ratio in the results table. |
-| **GC Pressure** | The rate at which objects are allocated and collected. High GC pressure means frequent pauses and reduced throughput. |
-| **Span\<T\>** | A stack-allocated, bounds-checked view over contiguous memory. Avoids heap allocations when slicing arrays or strings. |
-| **ObjectPool\<T\>** | A pool of reusable objects that avoids repeated allocation and GC pressure for frequently created/destroyed instances. |
-| **ValueTask\<T\>** | A lightweight alternative to `Task<T>` that avoids a heap allocation when the result is already available synchronously. |
-| **Performance Regression Test** | An xUnit test that asserts an operation completes within a time budget, catching regressions in CI. |
+| Концепція | Опис |
+|-----------|------|
+| **Мікробенчмарк** | Точне вимірювання однієї ізольованої операції (наприклад, один виклик методу). BenchmarkDotNet автоматично обробляє розігрів, кількість ітерацій та статистичний аналіз. |
+| **MemoryDiagnoser** | Діагностичний засіб BenchmarkDotNet, який звітує про виділені байти та колекції GC на операцію. Необхідний для пошуку прихованих виділень пам'яті. |
+| **Розігрів** | Початкові ітерації, які відкидаються, щоб JIT-компілятор мав час оптимізувати код. BenchmarkDotNet робить це автоматично. |
+| **Базовий рівень** | Метод бенчмарку, позначений `[Benchmark(Baseline = true)]`. Усі інші методи класу порівнюються з ним, показуючи співвідношення в таблиці результатів. |
+| **Навантаження на GC** | Швидкість, з якою об'єкти виділяються та збираються. Високе навантаження на GC означає часті паузи та знижену пропускну здатність. |
+| **Span\<T\>** | Виділений на стеку подання з перевіркою меж для безперервної пам'яті. Уникає виділень у купі при нарізці масивів або рядків. |
+| **ObjectPool\<T\>** | Пул повторно використовуваних об'єктів, що уникає повторного виділення та навантаження на GC для часто створюваних/знищуваних екземплярів. |
+| **ValueTask\<T\>** | Легка альтернатива `Task<T>`, що уникає виділення в купі, коли результат вже доступний синхронно. |
+| **Тест на регресію продуктивності** | Тест xUnit, який перевіряє, що операція завершується в межах часового бюджету, виявляючи регресії в CI. |
 
-## Tools
+## Інструменти
 
-- Language: C#
-- Benchmarking: [BenchmarkDotNet](https://benchmarkdotnet.org/)
-- Profiling: `dotnet-counters`, `dotnet-trace`
-- Framework: [xUnit v3](https://xunit.net/) (`xunit.v3`)
+- Мова: C#
+- Бенчмаркінг: [BenchmarkDotNet](https://benchmarkdotnet.org/)
+- Профілювання: `dotnet-counters`, `dotnet-trace`
+- Фреймворк: [xUnit v3](https://xunit.net/) (`xunit.v3`)
 
-## Setup
+## Налаштування
 
 ```bash
 dotnet new sln -n Lab8
@@ -52,22 +52,22 @@ dotnet add Lab8.Tests package Microsoft.NET.Test.Sdk
 dotnet add Lab8.Tests package Shouldly
 ```
 
-## Tasks
+## Завдання
 
-### Task 1 — Microbenchmarks with BenchmarkDotNet
+### Завдання 1 — Мікробенчмарки з BenchmarkDotNet
 
-Create benchmark classes that compare:
+Створіть класи бенчмарків, які порівнюють:
 
-1. **String concatenation**: `string +=` vs `StringBuilder` vs `string.Join` vs `string.Concat` for 100, 1000, and 10000 iterations
-2. **Collection lookup**: `List<T>.Contains` vs `HashSet<T>.Contains` vs `Dictionary<TKey,TValue>.ContainsKey` for 1000 and 100000 elements
+1. **Конкатенацію рядків**: `string +=` vs `StringBuilder` vs `string.Join` vs `string.Concat` для 100, 1000 та 10000 ітерацій
+2. **Пошук у колекціях**: `List<T>.Contains` vs `HashSet<T>.Contains` vs `Dictionary<TKey,TValue>.ContainsKey` для 1000 та 100000 елементів
 
-Each benchmark must:
+Кожен бенчмарк повинен:
 
-- Use `[MemoryDiagnoser]` to track allocations
-- Use `[Params]` for testing with different input sizes
-- Include `[Benchmark(Baseline = true)]` for comparison
+- Використовувати `[MemoryDiagnoser]` для відстеження виділень пам'яті
+- Використовувати `[Params]` для тестування з різними розмірами вхідних даних
+- Включати `[Benchmark(Baseline = true)]` для порівняння
 
-**Example — String Concatenation Benchmark**
+**Приклад — бенчмарк конкатенації рядків**
 
 ```csharp
 using BenchmarkDotNet.Attributes;
@@ -115,7 +115,7 @@ public class StringConcatenationBenchmarks
 }
 ```
 
-**Example — Running Benchmarks (Program.cs)**
+**Приклад — запуск бенчмарків (Program.cs)**
 
 ```csharp
 using BenchmarkDotNet.Running;
@@ -127,43 +127,43 @@ BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly).Run(args);
 dotnet run -c Release --project Lab8.Benchmarks -- --filter "*StringConcatenation*"
 ```
 
-**Expected Behavior — String Concatenation**
+**Очікувана поведінка — конкатенація рядків**
 
-| Method | N=100 | N=1000 | N=10000 | Allocations |
-|--------|-------|--------|---------|-------------|
-| `string +=` | Fast | Slow | Very slow | O(n^2) allocations |
-| `StringBuilder` | Fast | Fast | Fast | O(n) allocations |
-| `string.Join` | Fast | Fast | Fast | O(n) allocations |
-| `string.Concat` | Fast | Fast | Fast | O(n) allocations |
+| Метод | N=100 | N=1000 | N=10000 | Виділення пам'яті |
+|-------|-------|--------|---------|-------------------|
+| `string +=` | Швидко | Повільно | Дуже повільно | O(n^2) виділень |
+| `StringBuilder` | Швидко | Швидко | Швидко | O(n) виділень |
+| `string.Join` | Швидко | Швидко | Швидко | O(n) виділень |
+| `string.Concat` | Швидко | Швидко | Швидко | O(n) виділень |
 
-> At small sizes the difference is negligible. The quadratic allocation pattern of `+=` becomes dramatic at 10000 iterations.
+> При малих розмірах різниця незначна. Квадратичний шаблон виділень `+=` стає драматичним при 10000 ітерацій.
 
-**Expected Behavior — Collection Lookup**
+**Очікувана поведінка — пошук у колекціях**
 
-| Method | N=1000 | N=100000 | Time Complexity |
-|--------|--------|----------|-----------------|
-| `List<T>.Contains` | Fast | Slow | O(n) |
-| `HashSet<T>.Contains` | Fast | Fast | O(1) amortized |
-| `Dictionary.ContainsKey` | Fast | Fast | O(1) amortized |
+| Метод | N=1000 | N=100000 | Часова складність |
+|-------|--------|----------|-------------------|
+| `List<T>.Contains` | Швидко | Повільно | O(n) |
+| `HashSet<T>.Contains` | Швидко | Швидко | O(1) амортизовано |
+| `Dictionary.ContainsKey` | Швидко | Швидко | O(1) амортизовано |
 
-**Minimum test count for Task 1**: 2 benchmark classes (one per comparison).
+**Мінімальна кількість тестів для Завдання 1**: 2 класи бенчмарків (по одному на порівняння).
 
-> **Hint**: Use `BenchmarkSwitcher` in your `Program.cs` so you can run individual benchmarks with `--filter`. Running all benchmarks at once can take over an hour.
+> **Підказка**: Використовуйте `BenchmarkSwitcher` у вашому `Program.cs`, щоб можна було запускати окремі бенчмарки з `--filter`. Запуск усіх бенчмарків одночасно може зайняти понад годину.
 
-### Task 2 — Memory Allocation Analysis
+### Завдання 2 — Аналіз виділення пам'яті
 
-Write code that demonstrates and benchmarks:
+Напишіть код, який демонструє та порівнює:
 
-1. `Span<T>` vs `Array` slicing — measure zero-copy vs allocation
-2. `struct` vs `class` for small data objects — compare GC pressure
+1. `Span<T>` vs нарізка `Array` — вимірювання zero-copy проти виділення пам'яті
+2. `struct` vs `class` для малих об'єктів даних — порівняння навантаження на GC
 
-For each comparison, document:
+Для кожного порівняння задокументуйте:
 
-- Allocated bytes per operation
-- GC Gen0/Gen1/Gen2 collections
-- Which approach is better and why
+- Виділені байти на операцію
+- Колекції GC Gen0/Gen1/Gen2
+- Який підхід кращий і чому
 
-**Example — Span vs Array Slicing**
+**Приклад — Span vs нарізка масиву**
 
 ```csharp
 using BenchmarkDotNet.Attributes;
@@ -183,7 +183,7 @@ public class SpanVsArrayBenchmarks
     [Benchmark(Baseline = true)]
     public byte[] ArraySlice()
     {
-        // Allocates a new array on every call
+        // Виділяє новий масив при кожному виклику
         var slice = new byte[100];
         Array.Copy(_data, 5000, slice, 0, 100);
         return slice;
@@ -192,7 +192,7 @@ public class SpanVsArrayBenchmarks
     [Benchmark]
     public int SpanSlice()
     {
-        // Zero-allocation: creates a view over existing memory
+        // Нульове виділення: створює подання над існуючою пам'яттю
         var slice = _data.AsSpan(5000, 100);
         var sum = 0;
         foreach (var b in slice)
@@ -202,7 +202,7 @@ public class SpanVsArrayBenchmarks
 }
 ```
 
-**Example — Struct vs Class**
+**Приклад — Struct vs Class**
 
 ```csharp
 [MemoryDiagnoser]
@@ -240,18 +240,18 @@ public class StructVsClassBenchmarks
 }
 ```
 
-**Expected Behavior — Memory Allocation Comparison**
+**Очікувана поведінка — порівняння виділення пам'яті**
 
-| Comparison | Heap Allocations | GC Collections | Winner |
-|------------|-----------------|----------------|--------|
-| `Span<T>` slice vs `Array.Copy` | 0 B vs ~128 B | 0 vs Gen0 | `Span<T>` |
-| `struct` vs `class` (small data) | 0 B vs 24+ B per instance | 0 vs Gen0 | `struct` |
+| Порівняння | Виділення в купі | Колекції GC | Переможець |
+|------------|-----------------|-------------|------------|
+| Нарізка `Span<T>` vs `Array.Copy` | 0 Б vs ~128 Б | 0 vs Gen0 | `Span<T>` |
+| `struct` vs `class` (малі дані) | 0 Б vs 24+ Б на екземпляр | 0 vs Gen0 | `struct` |
 
-**Minimum test count for Task 2**: 2 benchmark classes (one per comparison).
+**Мінімальна кількість тестів для Завдання 2**: 2 класи бенчмарків (по одному на порівняння).
 
-### Task 3 — Performance Regression Tests
+### Завдання 3 — Тести на регресію продуктивності
 
-Write xUnit tests that enforce performance baselines:
+Напишіть тести xUnit, які забезпечують базові показники продуктивності:
 
 ```csharp
 [Fact]
@@ -267,14 +267,14 @@ public void SortAlgorithm_ShouldCompleteWithin50ms_For10000Elements()
 }
 ```
 
-Create tests for:
+Створіть тести для:
 
-1. Sort algorithm completes within time budget
-2. Search algorithm completes within time budget
-3. Serialization/deserialization within time budget
-4. Document why these thresholds were chosen
+1. Алгоритм сортування завершується в межах часового бюджету
+2. Алгоритм пошуку завершується в межах часового бюджету
+3. Серіалізація/десеріалізація в межах часового бюджету
+4. Задокументуйте, чому обрані ці порогові значення
 
-**Example — Full Regression Test Class**
+**Приклад — повний клас тестів на регресію**
 
 ```csharp
 using System.Diagnostics;
@@ -329,29 +329,29 @@ public class PerformanceRegressionTests
 }
 ```
 
-**Minimum test count for Task 3**: 3 test methods (sort, search, serialization).
+**Мінімальна кількість тестів для Завдання 3**: 3 тестових методи (сортування, пошук, серіалізація).
 
-> **Hint**: Choose thresholds that pass reliably on a typical developer machine but would fail if someone introduced an O(n^2) regression. Run the test 10 times locally to find a stable upper bound, then add a 2-3x safety margin.
+> **Підказка**: Обирайте порогові значення, які стабільно проходять на типовій машині розробника, але були б невдалими, якщо хтось введе регресію O(n^2). Запустіть тест 10 разів локально, щоб знайти стабільну верхню межу, а потім додайте запас безпеки 2-3x.
 
-> **Hint**: If tests are flaky in CI due to shared runners, consider using `[Trait("Category", "Performance")]` and running them separately from unit tests.
+> **Підказка**: Якщо тести нестабільні в CI через спільні раннери, розгляньте використання `[Trait("Category", "Performance")]` та запуск їх окремо від модульних тестів.
 
-## Grading
+## Оцінювання
 
-| Criteria |
+| Критерії |
 |----------|
-| Task 1 — BenchmarkDotNet benchmarks |
-| Task 2 — Memory allocation analysis |
-| Task 3 — Performance regression tests |
-| Results analysis in `REPORT.md` |
-| Correct benchmark methodology (warm-up, iterations) |
+| Завдання 1 — Бенчмарки BenchmarkDotNet |
+| Завдання 2 — Аналіз виділення пам'яті |
+| Завдання 3 — Тести на регресію продуктивності |
+| Аналіз результатів у `REPORT.md` |
+| Коректна методологія бенчмарків (розігрів, ітерації) |
 
-## Submission
+## Здача роботи
 
-- Solution with all three projects
-- `REPORT.md` with benchmark results tables and analysis
-- Run benchmarks in Release mode: `dotnet run -c Release --project Lab8.Benchmarks`
+- Рішення з усіма трьома проєктами
+- `REPORT.md` з таблицями результатів бенчмарків та аналізом
+- Запуск бенчмарків у режимі Release: `dotnet run -c Release --project Lab8.Benchmarks`
 
-## References
+## Посилання
 
 - [BenchmarkDotNet Documentation](https://benchmarkdotnet.org/articles/overview.html)
 - [BenchmarkDotNet — MemoryDiagnoser](https://benchmarkdotnet.org/articles/features/memory-diagnoser.html)

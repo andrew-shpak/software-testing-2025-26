@@ -1,36 +1,36 @@
-# Lab 2 — Unit Testing: Mocking and Test Doubles
+# Лабораторна 2 — Модульне тестування: Імітації та тестові замінники
 
-## Objective
+## Мета
 
-Learn to isolate units under test using mocking frameworks. Understand the difference between stubs, mocks, fakes, and spies. Apply dependency injection to make code testable.
+Навчитися ізолювати модулі, що тестуються, за допомогою фреймворків для створення імітацій. Зрозуміти різницю між заглушками (stubs), моками (mocks), підробками (fakes) та шпигунами (spies). Застосувати впровадження залежностей для забезпечення тестовності коду.
 
-**Duration:** 60 minutes
+**Тривалість:** 60 хвилин
 
-## Prerequisites
+## Передумови
 
-- Completed Lab 1
-- Understanding of interfaces and dependency injection in C#
+- Виконана Лабораторна 1
+- Розуміння інтерфейсів та впровадження залежностей у C#
 
-## Tools
+## Інструменти
 
-- Language: C#
-- Framework: [xUnit v3](https://xunit.net/) (`xunit.v3`)
-- Mocking: [NSubstitute](https://nsubstitute.github.io/)
+- Мова: C#
+- Фреймворк: [xUnit v3](https://xunit.net/) (`xunit.v3`)
+- Імітації: [NSubstitute](https://nsubstitute.github.io/)
 
-## Key Concepts
+## Ключові поняття
 
-- **Test double** — an object that stands in for a real dependency
-  - **Stub** — returns predefined data (no behavior verification)
-  - **Mock** — verifies that certain methods were called
-  - **Fake** — a working implementation (e.g., in-memory database)
-  - **Spy** — records calls for later inspection
-- **Dependency Injection (DI)** — passing dependencies via constructor instead of creating them inside the class
-- **NSubstitute** syntax:
-  - `Substitute.For<IService>()` — create a mock
-  - `service.Method(arg).Returns(value)` — set up return value
-  - `service.Received().Method(arg)` — verify call
+- **Тестовий замінник (Test double)** — об'єкт, що замінює реальну залежність
+  - **Заглушка (Stub)** — повертає заздалегідь визначені дані (без перевірки поведінки)
+  - **Мок (Mock)** — перевіряє, що певні методи були викликані
+  - **Підробка (Fake)** — робоча реалізація (наприклад, база даних у пам'яті)
+  - **Шпигун (Spy)** — записує виклики для подальшої перевірки
+- **Впровадження залежностей (DI)** — передача залежностей через конструктор замість їх створення всередині класу
+- Синтаксис **NSubstitute**:
+  - `Substitute.For<IService>()` — створити мок
+  - `service.Method(arg).Returns(value)` — налаштувати значення, що повертається
+  - `service.Received().Method(arg)` — перевірити виклик
 
-## Setup
+## Налаштування
 
 ```bash
 dotnet new sln -n Lab2
@@ -44,11 +44,11 @@ dotnet add Lab2.Tests package NSubstitute
 dotnet add Lab2.Tests package Shouldly
 ```
 
-## Tasks
+## Завдання
 
-### Task 1 — Order Service with Mocked Repository
+### Завдання 1 — Сервіс замовлень з імітованим репозиторієм
 
-Create the following interfaces and classes in `Lab2.Core`:
+Створіть наступні інтерфейси та класи в `Lab2.Core`:
 
 ```csharp
 public record Order(int Id, int CustomerId, string CustomerEmail,
@@ -80,20 +80,20 @@ public interface INotificationService
 
 public class OrderService
 {
-    // Constructor injection of all three dependencies
-    // Implement: PlaceOrder, CancelOrder, GetOrderHistory
+    // Впровадження через конструктор усіх трьох залежностей
+    // Реалізувати: PlaceOrder, CancelOrder, GetOrderHistory
 }
 ```
 
-Write tests for `OrderService` that:
+Напишіть тести для `OrderService`, що:
 
-1. Mock `IOrderRepository` to return predefined orders
-2. Mock `IPaymentGateway` to simulate successful/failed payments
-3. Verify `INotificationService.SendOrderConfirmation` is called with correct parameters
-4. Test that `CancelOrder` throws when order is already shipped
-5. Use `[Theory]` with `[InlineData]` for multiple payment scenarios
+1. Імітують `IOrderRepository` для повернення заздалегідь визначених замовлень
+2. Імітують `IPaymentGateway` для симуляції успішних/неуспішних платежів
+3. Перевіряють, що `INotificationService.SendOrderConfirmation` викликається з правильними параметрами
+4. Тестують, що `CancelOrder` кидає виняток, коли замовлення вже відправлено
+5. Використовують `[Theory]` з `[InlineData]` для кількох сценаріїв оплати
 
-**Example test:**
+**Приклад тесту:**
 
 ```csharp
 [Fact]
@@ -118,13 +118,13 @@ public void PlaceOrder_WhenPaymentSucceeds_SavesOrderAndSendsConfirmation()
 }
 ```
 
-> **Note:** Include at least 2 tests that verify call order, argument capture, or `DidNotReceive()` patterns.
+> **Примітка:** Додайте щонайменше 2 тести, що перевіряють порядок викликів, перехоплення аргументів або шаблони `DidNotReceive()`.
 
-**Minimum test count:** 10 tests
+**Мінімальна кількість тестів:** 10 тестів
 
-### Task 2 — Weather Forecast Service
+### Завдання 2 — Сервіс прогнозу погоди
 
-Create:
+Створіть:
 
 ```csharp
 public record WeatherData(string City, double Temperature, string Description, DateTime Date);
@@ -144,40 +144,40 @@ public interface ICacheService
 
 public class WeatherForecastService
 {
-    // Uses IWeatherApiClient and ICacheService
-    // Implement: GetForecastAsync (checks cache first, then API)
-    // Cache key format: "weather:{city}:{days}"
-    // Cache expiration: 30 minutes
+    // Використовує IWeatherApiClient та ICacheService
+    // Реалізувати: GetForecastAsync (спочатку перевіряє кеш, потім API)
+    // Формат ключа кешу: "weather:{city}:{days}"
+    // Термін дії кешу: 30 хвилин
 }
 ```
 
-Write tests that:
+Напишіть тести, що:
 
-1. Verify cache is checked before calling API
-2. Verify API result is stored in cache
-3. When cache exists, API is never called
-4. Handle API exceptions gracefully (return cached data or throw custom exception)
-5. Test async methods properly with `async Task` test methods
+1. Перевіряють, що кеш перевіряється перед викликом API
+2. Перевіряють, що результат API зберігається в кеші
+3. Коли кеш існує, API ніколи не викликається
+4. Обробляють винятки API коректно (повертають закешовані дані або кидають власний виняток)
+5. Правильно тестують асинхронні методи з тестовими методами `async Task`
 
-**Minimum test count:** 5 tests
+**Мінімальна кількість тестів:** 5 тестів
 
-## Grading
+## Оцінювання
 
-| Criteria |
+| Критерії |
 |----------|
-| Task 1 — Order service tests |
-| Task 2 — Weather service tests |
-| Correct use of NSubstitute mock/stub/verify |
-| Clean dependency injection |
+| Завдання 1 — Тести сервісу замовлень |
+| Завдання 2 — Тести сервісу погоди |
+| Правильне використання mock/stub/verify у NSubstitute |
+| Чисте впровадження залежностей |
 
-## Submission
+## Здача роботи
 
-- Solution with `Lab2.Core` and `Lab2.Tests` projects
-- All dependencies injected via constructor (no `new` inside service classes)
-- Minimum 15 total tests
+- Рішення з проєктами `Lab2.Core` та `Lab2.Tests`
+- Усі залежності впроваджені через конструктор (жодного `new` всередині класів сервісів)
+- Мінімум 15 тестів загалом
 
-## References
+## Посилання
 
-- [NSubstitute Documentation](https://nsubstitute.github.io/help/getting-started/)
-- [NSubstitute — Checking received calls](https://nsubstitute.github.io/help/received-calls/)
-- [Shouldly Documentation](https://docs.shouldly.org/)
+- [Документація NSubstitute](https://nsubstitute.github.io/help/getting-started/)
+- [NSubstitute — Перевірка отриманих викликів](https://nsubstitute.github.io/help/received-calls/)
+- [Документація Shouldly](https://docs.shouldly.org/)

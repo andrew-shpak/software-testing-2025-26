@@ -1,47 +1,47 @@
-# Lab 6 — Database Testing: Data Integrity and Transactions
+# Лабораторна 6 — Тестування баз даних: цілісність даних та транзакції
 
-## Objective
+## Мета
 
-Test transactional behavior, data seeding, migration correctness, and repository patterns with real database constraints.
+Тестування транзакційної поведінки, наповнення даними, коректності міграцій та шаблонів репозиторіїв з реальними обмеженнями бази даних.
 
-**Duration:** 60 minutes
+**Тривалість:** 60 хвилин
 
-## Prerequisites
+## Передумови
 
-Before starting this lab, make sure you have:
+Перед початком цієї лабораторної переконайтеся, що у вас є:
 
-- .NET 10+ SDK installed (`dotnet --version`)
-- Docker installed and running (required for Testcontainers PostgreSQL)
-- A working understanding of database transactions, ACID properties, and EF Core `SaveChanges` behavior
-- Familiarity with EF Core migrations, seed data, and interceptors/`SaveChanges` override
-- Completed Lab 5 (database testing with InMemory, SQLite, and Testcontainers)
+- Встановлений .NET 10+ SDK (`dotnet --version`)
+- Встановлений та запущений Docker (необхідний для Testcontainers PostgreSQL)
+- Розуміння транзакцій бази даних, властивостей ACID та поведінки EF Core `SaveChanges`
+- Знайомство з міграціями EF Core, початковими даними та перехоплювачами/перевизначенням `SaveChanges`
+- Виконана Лабораторна 5 (тестування баз даних з InMemory, SQLite та Testcontainers)
 
-## Key Concepts
+## Ключові концепції
 
-### ACID Transactions
+### Транзакції ACID
 
-A transaction groups multiple database operations into a single atomic unit. Either all operations succeed (commit) or all are rolled back. In this lab, the `TransferService` must guarantee that money is never lost: if the sender's deduction succeeds but the receiver's credit fails, both changes must be reverted.
+Транзакція групує кілька операцій з базою даних в єдину атомарну одиницю. Або всі операції успішні (фіксація), або всі відкочуються. У цій лабораторній `TransferService` має гарантувати, що гроші ніколи не втрачаються: якщо списання з рахунку відправника успішне, але зарахування на рахунок отримувача невдале, обидві зміни мають бути скасовані.
 
-### Optimistic vs. Pessimistic Concurrency
+### Оптимістичний vs песимістичний контроль паралелізму
 
-When multiple threads or requests modify the same row simultaneously, conflicts can occur. EF Core supports optimistic concurrency via `[ConcurrencyCheck]` or row version columns. The database rejects updates where the row has changed since it was last read. This is critical for preventing negative balances under concurrent transfers.
+Коли кілька потоків або запитів одночасно змінюють один і той самий рядок, можуть виникати конфлікти. EF Core підтримує оптимістичний контроль паралелізму через `[ConcurrencyCheck]` або стовпці версії рядка. База даних відхиляє оновлення, де рядок змінився з моменту останнього зчитування. Це критично для запобігання від'ємних балансів при паралельних переказах.
 
-### Data Seeding
+### Наповнення даними
 
-EF Core's `HasData()` method in `OnModelCreating` allows you to define seed data that is applied when migrations run. Tests should verify that seeded data exists after migration and that schema changes (adding/removing columns) preserve existing data.
+Метод `HasData()` EF Core у `OnModelCreating` дозволяє визначити початкові дані, які застосовуються під час виконання міграцій. Тести повинні перевіряти, що початкові дані існують після міграції та що зміни схеми (додавання/видалення стовпців) зберігають існуючі дані.
 
-### Audit Trails via SaveChanges Override
+### Аудит через перевизначення SaveChanges
 
-By overriding `SaveChanges` or using EF Core interceptors, you can automatically record every entity change (create, update, delete) into an `AuditLog` table. The audit entry must be written in the same transaction as the entity change, ensuring consistency.
+Перевизначивши `SaveChanges` або використовуючи перехоплювачі EF Core, ви можете автоматично записувати кожну зміну сутності (створення, оновлення, видалення) до таблиці `AuditLog`. Запис аудиту повинен бути записаний у тій самій транзакції, що й зміна сутності, забезпечуючи узгодженість.
 
-## Tools
+## Інструменти
 
-- Language: C#
+- Мова: C#
 - ORM: [Entity Framework Core](https://learn.microsoft.com/en-us/ef/core/)
-- Test DB: SQLite in-memory / [Testcontainers for .NET](https://dotnet.testcontainers.org/)
-- Framework: [xUnit v3](https://xunit.net/) (`xunit.v3`)
+- Тестова БД: SQLite in-memory / [Testcontainers for .NET](https://dotnet.testcontainers.org/)
+- Фреймворк: [xUnit v3](https://xunit.net/) (`xunit.v3`)
 
-## Setup
+## Налаштування
 
 ```bash
 dotnet new sln -n Lab6
@@ -59,11 +59,11 @@ dotnet add Lab6.Tests package Npgsql.EntityFrameworkCore.PostgreSQL
 dotnet add Lab6.Tests package Shouldly
 ```
 
-## Tasks
+## Завдання
 
-### Task 1 — Transaction Testing with Testcontainers
+### Завдання 1 — Тестування транзакцій з Testcontainers
 
-Create a `BankAccountService` that manages transfers between accounts:
+Створіть `BankAccountService`, який керує переказами між рахунками:
 
 ```csharp
 public class BankAccount
@@ -80,7 +80,7 @@ public class TransferService
 }
 ```
 
-Use Testcontainers to run a real PostgreSQL instance:
+Використовуйте Testcontainers для запуску реального екземпляра PostgreSQL:
 
 ```csharp
 private readonly PostgreSqlContainer _dbContainer = new PostgreSqlBuilder()
@@ -88,19 +88,19 @@ private readonly PostgreSqlContainer _dbContainer = new PostgreSqlBuilder()
     .Build();
 ```
 
-Write tests that verify:
+Напишіть тести, які перевіряють:
 
-1. Successful transfer decreases sender balance and increases receiver balance
-2. Transfer with insufficient funds is rejected and both balances remain unchanged (rollback)
-3. Transfer to non-existing account fails and sender balance is unchanged
-4. Transfer of zero or negative amount is rejected
-5. Concurrent transfers from the same account do not cause negative balance
+1. Успішний переказ зменшує баланс відправника та збільшує баланс отримувача
+2. Переказ з недостатніми коштами відхиляється, і обидва баланси залишаються незмінними (відкат)
+3. Переказ на неіснуючий рахунок невдалий, і баланс відправника не змінюється
+4. Переказ нульової або від'ємної суми відхиляється
+5. Паралельні перекази з одного рахунку не призводять до від'ємного балансу
 
-**Minimum test count: 5 tests**
+**Мінімальна кількість тестів: 5 тестів**
 
-> **Prerequisite**: Docker must be installed and running.
+> **Передумова**: Docker має бути встановлений та запущений.
 
-#### Example: Testcontainers PostgreSQL Setup
+#### Приклад: налаштування Testcontainers PostgreSQL
 
 ```csharp
 public class TransferServiceTests : IAsyncLifetime
@@ -123,7 +123,7 @@ public class TransferServiceTests : IAsyncLifetime
         _context = new AppDbContext(options);
         await _context.Database.EnsureCreatedAsync();
 
-        // Seed test accounts
+        // Наповнення тестовими рахунками
         _context.BankAccounts.AddRange(
             new BankAccount { AccountNumber = "ACC-001", OwnerName = "Alice", Balance = 1000m },
             new BankAccount { AccountNumber = "ACC-002", OwnerName = "Bob", Balance = 500m }
@@ -141,7 +141,7 @@ public class TransferServiceTests : IAsyncLifetime
 }
 ```
 
-#### Example: Transaction Tests with Shouldly
+#### Приклад: тести транзакцій з Shouldly
 
 ```csharp
 [Fact]
@@ -157,7 +157,7 @@ public async Task Transfer_ValidAmount_UpdatesBothBalancesAsync()
     // Assert
     result.Success.ShouldBeTrue();
 
-    // Reload from database to verify persisted state
+    // Перезавантажити з бази даних для перевірки збереженого стану
     await _context.Entry(alice).ReloadAsync();
     await _context.Entry(bob).ReloadAsync();
 
@@ -173,12 +173,12 @@ public async Task Transfer_InsufficientFunds_RollsBackAsync()
     var bob = await _context.BankAccounts.FirstAsync(a => a.OwnerName == "Bob");
 
     // Act
-    var result = await _service.TransferAsync(alice.Id, bob.Id, 5000m); // Alice only has 1000
+    var result = await _service.TransferAsync(alice.Id, bob.Id, 5000m); // У Alice лише 1000
 
     // Assert
     result.Success.ShouldBeFalse();
 
-    // Verify rollback — balances unchanged
+    // Перевірка відкату — баланси не змінились
     await _context.Entry(alice).ReloadAsync();
     await _context.Entry(bob).ReloadAsync();
 
@@ -199,7 +199,7 @@ public async Task Transfer_ToNonExistingAccount_FailsAndSenderUnchangedAsync()
     result.Success.ShouldBeFalse();
 
     await _context.Entry(alice).ReloadAsync();
-    alice.Balance.ShouldBe(1000m); // unchanged
+    alice.Balance.ShouldBe(1000m); // не змінився
 }
 
 [Fact]
@@ -233,11 +233,11 @@ public async Task Transfer_ZeroAmount_IsRejectedAsync()
 [Fact]
 public async Task ConcurrentTransfers_DoNotCauseNegativeBalanceAsync()
 {
-    // Arrange — Alice has 1000, attempt two 600 transfers concurrently
+    // Arrange — у Alice 1000, спроба двох паралельних переказів по 600
     var alice = await _context.BankAccounts.FirstAsync(a => a.OwnerName == "Alice");
     var bob = await _context.BankAccounts.FirstAsync(a => a.OwnerName == "Bob");
 
-    // Act — run two transfers in parallel
+    // Act — запуск двох паралельних переказів
     var task1 = Task.Run(() =>
     {
         using var ctx1 = CreateNewContext();
@@ -253,32 +253,32 @@ public async Task ConcurrentTransfers_DoNotCauseNegativeBalanceAsync()
 
     var results = await Task.WhenAll(task1, task2);
 
-    // Assert — at most one should succeed
+    // Assert — максимум один має бути успішним
     var successCount = results.Count(r => r.Success);
     successCount.ShouldBeLessThanOrEqualTo(1);
 
-    // Verify Alice's balance is never negative
+    // Перевірка, що баланс Alice ніколи не стає від'ємним
     await _context.Entry(alice).ReloadAsync();
     alice.Balance.ShouldBeGreaterThanOrEqualTo(0m);
 }
 ```
 
-#### Expected Behavior Table
+#### Таблиця очікуваної поведінки
 
-| Scenario | Expected Result | Sender Balance | Receiver Balance |
+| Сценарій | Очікуваний результат | Баланс відправника | Баланс отримувача |
 |---|---|---|---|
-| Transfer 200 (sender has 1000) | Success | 800 | +200 |
-| Transfer 5000 (sender has 1000) | Failure (rollback) | 1000 (unchanged) | unchanged |
-| Transfer to non-existing account | Failure | unchanged | N/A |
-| Transfer negative amount | Failure (rejected) | unchanged | unchanged |
-| Transfer zero amount | Failure (rejected) | unchanged | unchanged |
-| Two concurrent 600 transfers (sender has 1000) | At most one succeeds | >= 0 | varies |
+| Переказ 200 (у відправника 1000) | Успіх | 800 | +200 |
+| Переказ 5000 (у відправника 1000) | Невдача (відкат) | 1000 (не змінився) | не змінився |
+| Переказ на неіснуючий рахунок | Невдача | не змінився | Н/Д |
+| Переказ від'ємної суми | Невдача (відхилено) | не змінився | не змінився |
+| Переказ нульової суми | Невдача (відхилено) | не змінився | не змінився |
+| Два паралельних перекази по 600 (у відправника 1000) | Максимум один успішний | >= 0 | варіюється |
 
-> **Hint:** For concurrent transfer testing, each parallel task must use its own `DbContext` instance (EF Core contexts are not thread-safe). Use `IDbContextFactory<AppDbContext>` or manually create new contexts with the same connection string. Consider using `[ConcurrencyCheck]` on the `Balance` property or a `[Timestamp]` row version column.
+> **Підказка:** Для тестування паралельних переказів кожна паралельна задача повинна використовувати власний екземпляр `DbContext` (контексти EF Core не є потокобезпечними). Використовуйте `IDbContextFactory<AppDbContext>` або створюйте нові контексти вручну з тим самим рядком підключення. Розгляньте використання `[ConcurrencyCheck]` на властивості `Balance` або стовпця версії рядка `[Timestamp]`.
 
-### Task 2 — Audit Trail Testing
+### Завдання 2 — Тестування аудиту
 
-Implement an audit trail using EF Core interceptors or `SaveChanges` override:
+Реалізуйте аудит за допомогою перехоплювачів EF Core або перевизначення `SaveChanges`:
 
 ```csharp
 public class AuditLog
@@ -286,21 +286,21 @@ public class AuditLog
     public int Id { get; set; }
     public string EntityName { get; set; }
     public string Action { get; set; }       // "Created", "Updated", "Deleted"
-    public string Changes { get; set; }       // JSON of changed properties
+    public string Changes { get; set; }       // JSON змінених властивостей
     public DateTime Timestamp { get; set; }
 }
 ```
 
-Write tests that verify:
+Напишіть тести, які перевіряють:
 
-1. Creating an entity generates an audit log entry with `Action = "Created"`
-2. Updating an entity logs changed properties
-3. Deleting an entity generates a log with `Action = "Deleted"`
-4. Audit log is written in the same transaction as the entity change
+1. Створення сутності генерує запис аудиту з `Action = "Created"`
+2. Оновлення сутності записує змінені властивості
+3. Видалення сутності генерує запис з `Action = "Deleted"`
+4. Запис аудиту записується в тій самій транзакції, що й зміна сутності
 
-**Minimum test count: 4 tests**
+**Мінімальна кількість тестів: 4 тести**
 
-#### Example: SaveChanges Override for Auditing
+#### Приклад: перевизначення SaveChanges для аудиту
 
 ```csharp
 public class AuditableDbContext : DbContext
@@ -341,7 +341,7 @@ public class AuditableDbContext : DbContext
 }
 ```
 
-#### Example: Audit Trail Tests with Shouldly
+#### Приклад: тести аудиту з Shouldly
 
 ```csharp
 [Fact]
@@ -385,9 +385,9 @@ public async Task UpdateEntity_LogsChangedPropertiesAsync()
         context.BankAccounts.Add(account);
         await context.SaveChangesAsync();
 
-        // Clear audit logs from creation
+        // Очистити журнали аудиту від створення
         context.AuditLogs.RemoveRange(context.AuditLogs);
-        await context.SaveChangesAsync(); // this will also generate logs, handle accordingly
+        await context.SaveChangesAsync(); // це також згенерує журнали, обробіть відповідно
 
         // Act
         account.OwnerName = "After";
@@ -438,14 +438,14 @@ public async Task AuditLog_WrittenInSameTransactionAsync()
     using (connection)
     using (context)
     {
-        // Act — create an entity (audit log should be saved atomically)
+        // Act — створення сутності (запис аудиту має бути збережений атомарно)
         context.BankAccounts.Add(new BankAccount
         {
             AccountNumber = "AUDIT-004", OwnerName = "Atomic", Balance = 100m
         });
         await context.SaveChangesAsync();
 
-        // Assert — both entity and audit log exist (single transaction)
+        // Assert — і сутність, і запис аудиту існують (одна транзакція)
         var accountExists = await context.BankAccounts.AnyAsync(a => a.AccountNumber == "AUDIT-004");
         var auditExists = await context.AuditLogs.AnyAsync(l => l.EntityName == "BankAccount" && l.Action == "Created");
 
@@ -455,38 +455,38 @@ public async Task AuditLog_WrittenInSameTransactionAsync()
 }
 ```
 
-#### Expected Behavior Table — Audit Trail
+#### Таблиця очікуваної поведінки — аудит
 
-| Operation | AuditLog.Action | AuditLog.EntityName | AuditLog.Changes |
+| Операція | AuditLog.Action | AuditLog.EntityName | AuditLog.Changes |
 |---|---|---|---|
-| Add new BankAccount | `"Created"` | `"BankAccount"` | JSON with all property values |
-| Update OwnerName | `"Updated"` | `"BankAccount"` | JSON containing `"OwnerName"` |
-| Delete BankAccount | `"Deleted"` | `"BankAccount"` | JSON with deleted entity's values |
+| Додавання нового BankAccount | `"Created"` | `"BankAccount"` | JSON з усіма значеннями властивостей |
+| Оновлення OwnerName | `"Updated"` | `"BankAccount"` | JSON, що містить `"OwnerName"` |
+| Видалення BankAccount | `"Deleted"` | `"BankAccount"` | JSON зі значеннями видаленої сутності |
 
-> **Hint:** Be careful with the `SaveChanges` override -- do not generate audit logs for `AuditLog` entity changes themselves, or you will create an infinite loop. Filter out `AuditLog` entries in the `ChangeTracker` query. Also note that the `AuditLog` entries are added to the same `SaveChanges` batch, so they participate in the same database transaction automatically.
+> **Підказка:** Будьте обережні з перевизначенням `SaveChanges` — не генеруйте записи аудиту для змін самої сутності `AuditLog`, інакше створите нескінченний цикл. Відфільтруйте записи `AuditLog` у запиті до `ChangeTracker`. Також зверніть увагу, що записи `AuditLog` додаються до того самого пакету `SaveChanges`, тому вони автоматично беруть участь у тій самій транзакції бази даних.
 
-## Grading
+## Оцінювання
 
-| Criteria |
+| Критерії |
 |----------|
-| Task 1 — Transaction tests |
-| Task 2 — Audit trail tests |
-| Correct transaction rollback verification |
-| Test isolation and cleanup |
+| Завдання 1 — Тести транзакцій |
+| Завдання 2 — Тести аудиту |
+| Коректна перевірка відкату транзакцій |
+| Ізоляція тестів та очищення |
 
-## Submission
+## Здача роботи
 
-- Solution with `Lab6.Data` and `Lab6.Tests` projects
-- All transactional tests must prove atomicity (both sides of transaction verified)
+- Рішення з проєктами `Lab6.Data` та `Lab6.Tests`
+- Усі транзакційні тести повинні доводити атомарність (перевірені обидві сторони транзакції)
 
-## References
+## Посилання
 
-- [EF Core Transactions](https://learn.microsoft.com/en-us/ef/core/saving/transactions) — explicit transactions, `BeginTransaction`, `SaveChanges` behavior
-- [EF Core Concurrency Conflicts](https://learn.microsoft.com/en-us/ef/core/saving/concurrency) — optimistic concurrency, `[ConcurrencyCheck]`, row versions
-- [EF Core Data Seeding](https://learn.microsoft.com/en-us/ef/core/modeling/data-seeding) — `HasData()` in `OnModelCreating`
-- [EF Core Interceptors](https://learn.microsoft.com/en-us/ef/core/logging-events-diagnostics/interceptors) — `SaveChangesInterceptor`, auditing patterns
-- [Testcontainers for .NET](https://dotnet.testcontainers.org/) — container-based test infrastructure
-- [Testcontainers PostgreSQL Module](https://dotnet.testcontainers.org/modules/postgres/) — PostgreSQL container configuration
-- [xUnit v3 Documentation](https://xunit.net/docs/getting-started/v3/cmdline) — test framework reference
-- [Shouldly Documentation](https://docs.shouldly.org/) — assertion library API
-- [Npgsql EF Core Provider](https://www.npgsql.org/efcore/) — PostgreSQL-specific EF Core features
+- [EF Core Transactions](https://learn.microsoft.com/en-us/ef/core/saving/transactions) — явні транзакції, `BeginTransaction`, поведінка `SaveChanges`
+- [EF Core Concurrency Conflicts](https://learn.microsoft.com/en-us/ef/core/saving/concurrency) — оптимістичний контроль паралелізму, `[ConcurrencyCheck]`, версії рядків
+- [EF Core Data Seeding](https://learn.microsoft.com/en-us/ef/core/modeling/data-seeding) — `HasData()` у `OnModelCreating`
+- [EF Core Interceptors](https://learn.microsoft.com/en-us/ef/core/logging-events-diagnostics/interceptors) — `SaveChangesInterceptor`, шаблони аудиту
+- [Testcontainers for .NET](https://dotnet.testcontainers.org/) — тестова інфраструктура на основі контейнерів
+- [Testcontainers PostgreSQL Module](https://dotnet.testcontainers.org/modules/postgres/) — конфігурація контейнера PostgreSQL
+- [xUnit v3 Documentation](https://xunit.net/docs/getting-started/v3/cmdline) — довідник тестового фреймворку
+- [Shouldly Documentation](https://docs.shouldly.org/) — API бібліотеки тверджень
+- [Npgsql EF Core Provider](https://www.npgsql.org/efcore/) — специфічні для PostgreSQL можливості EF Core

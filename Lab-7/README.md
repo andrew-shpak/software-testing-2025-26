@@ -1,46 +1,46 @@
-# Lab 7 — Performance Testing: Load and Stress
+# Лабораторна 7 — Тестування продуктивності: навантаження та стрес
 
-## Objective
+## Мета
 
-Learn to perform load and stress testing on a web API. Identify performance bottlenecks, establish baselines, and determine system breaking points.
+Навчитися виконувати навантажувальне та стрес-тестування веб-API. Виявляти вузькі місця продуктивності, встановлювати базові показники та визначати межі працездатності системи.
 
-**Duration:** 60 minutes
+**Тривалість:** 60 хвилин
 
-## Prerequisites
+## Передумови
 
-- .NET 10 SDK or later installed
-- C# fundamentals and ASP.NET Core basics
-- Understanding of HTTP methods (GET, POST) and status codes
-- For **Option A (NBomber)**: familiarity with xUnit test structure
-- For **Option B (k6)**: Node.js or Homebrew/Chocolatey for installation; basic JavaScript knowledge
-- A terminal capable of running long-lived processes (the API must stay running during tests)
-- Recommended: a machine with at least 4 CPU cores and 8 GB RAM for meaningful results
+- Встановлений .NET 10 SDK або новіший
+- Основи C# та ASP.NET Core
+- Розуміння HTTP-методів (GET, POST) та кодів стану
+- Для **варіанту A (NBomber)**: знайомство зі структурою тестів xUnit
+- Для **варіанту B (k6)**: Node.js або Homebrew/Chocolatey для встановлення; базові знання JavaScript
+- Термінал, здатний запускати довготривалі процеси (API має працювати під час тестів)
+- Рекомендовано: машина з щонайменше 4 ядрами CPU та 8 ГБ RAM для значущих результатів
 
-## Key Concepts
+## Ключові концепції
 
-| Concept | Description |
-|---------|-------------|
-| **Virtual User (VU)** | A simulated user that executes a test scenario in a loop. Each VU maintains its own HTTP connection and cookie state. |
-| **Requests Per Second (RPS)** | The throughput of the system — how many HTTP requests the server handles each second. |
-| **Percentile (p50 / p95 / p99)** | A statistical measure of response times. p95 = 95 % of requests completed within this duration. |
-| **Smoke Test** | A minimal-load test (1-2 VUs) that validates the system works at all before heavier tests. |
-| **Load Test** | Simulates expected, normal traffic to verify the system meets performance targets. |
-| **Stress Test** | Pushes the system beyond normal capacity to find the breaking point. |
-| **Spike Test** | A sudden burst of traffic to see how the system handles sharp peaks. |
-| **Endurance (Soak) Test** | Runs at moderate load for an extended period to detect memory leaks and resource exhaustion. |
-| **Error Rate** | Percentage of failed requests out of total requests. A key indicator of system health under load. |
-| **Breaking Point** | The load level at which the system starts returning unacceptable error rates or response times. |
+| Концепція | Опис |
+|-----------|------|
+| **Віртуальний користувач (VU)** | Симульований користувач, який виконує тестовий сценарій у циклі. Кожен VU підтримує власне HTTP-з'єднання та стан cookie. |
+| **Запити на секунду (RPS)** | Пропускна здатність системи — кількість HTTP-запитів, які сервер обробляє щосекунди. |
+| **Перцентиль (p50 / p95 / p99)** | Статистична міра часу відповіді. p95 = 95 % запитів виконано за цей час. |
+| **Smoke-тест** | Тест з мінімальним навантаженням (1-2 VU), який перевіряє, що система взагалі працює перед більш важкими тестами. |
+| **Навантажувальний тест** | Симулює очікуваний, нормальний трафік для перевірки відповідності системи цільовим показникам продуктивності. |
+| **Стрес-тест** | Навантажує систему понад нормальну потужність для знаходження точки відмови. |
+| **Spike-тест** | Раптовий сплеск трафіку для перевірки, як система справляється з різкими піками. |
+| **Тест на витривалість (Soak)** | Працює при помірному навантаженні протягом тривалого періоду для виявлення витоків пам'яті та вичерпання ресурсів. |
+| **Частка помилок** | Відсоток невдалих запитів від загальної кількості запитів. Ключовий показник стану системи під навантаженням. |
+| **Точка відмови** | Рівень навантаження, при якому система починає повертати неприйнятну частку помилок або час відповіді. |
 
-## Tools
+## Інструменти
 
-- Language: C#
-- API: ASP.NET Core Web API (system under test)
-- Load Testing: [k6](https://k6.io/) or [NBomber](https://nbomber.com/)
-- Framework: [xUnit v3](https://xunit.net/) (`xunit.v3`, for NBomber-based tests)
+- Мова: C#
+- API: ASP.NET Core Web API (система, що тестується)
+- Навантажувальне тестування: [k6](https://k6.io/) або [NBomber](https://nbomber.com/)
+- Фреймворк: [xUnit v3](https://xunit.net/) (`xunit.v3`, для тестів на основі NBomber)
 
-## Setup
+## Налаштування
 
-### Option A — NBomber (C# native)
+### Варіант A — NBomber (нативний C#)
 
 ```bash
 dotnet new sln -n Lab7
@@ -54,26 +54,26 @@ dotnet add Lab7.Tests package NBomber
 dotnet add Lab7.Tests package NBomber.Http
 ```
 
-### Option B — k6 (JavaScript-based)
+### Варіант B — k6 (на основі JavaScript)
 
 ```bash
-# Install k6: https://k6.io/docs/getting-started/installation/
+# Встановлення k6: https://k6.io/docs/getting-started/installation/
 brew install k6    # macOS
 choco install k6   # Windows
 ```
 
-## Tasks
+## Завдання
 
-### Task 1 — Build the System Under Test
+### Завдання 1 — Побудова системи, що тестується
 
-Create a simple ASP.NET Core API with:
+Створіть простий ASP.NET Core API з:
 
-- `GET /api/products` — returns a list of products (simulate DB delay with `Task.Delay`)
-- `GET /api/products/{id}` — returns single product
-- `POST /api/products` — creates a product
-- `GET /api/products/search?q=term` — search with simulated heavy computation
+- `GET /api/products` — повертає список продуктів (симуляція затримки БД через `Task.Delay`)
+- `GET /api/products/{id}` — повертає окремий продукт
+- `POST /api/products` — створює продукт
+- `GET /api/products/search?q=term` — пошук з симуляцією важких обчислень
 
-**Example — Minimal Product Controller (NBomber path)**
+**Приклад — мінімальний контролер продуктів (шлях NBomber)**
 
 ```csharp
 public record Product(int Id, string Name, decimal Price);
@@ -92,7 +92,7 @@ public class ProductsController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> GetAll()
     {
-        await Task.Delay(50); // simulate DB latency
+        await Task.Delay(50); // симуляція затримки БД
         return Ok(_products);
     }
 
@@ -114,7 +114,7 @@ public class ProductsController : ControllerBase
     [HttpGet("search")]
     public async Task<IActionResult> Search([FromQuery] string q)
     {
-        // Simulate heavy computation
+        // Симуляція важких обчислень
         await Task.Delay(200);
         var results = _products.Where(p =>
             p.Name.Contains(q, StringComparison.OrdinalIgnoreCase));
@@ -123,24 +123,24 @@ public class ProductsController : ControllerBase
 }
 ```
 
-> **Hint**: Keep the `Task.Delay` values realistic but not too large. 50-200 ms simulates a typical database round-trip. This makes it easier to observe how response times degrade under load.
+> **Підказка**: Тримайте значення `Task.Delay` реалістичними, але не занадто великими. 50-200 мс симулює типовий зворотний виклик до бази даних. Це полегшує спостереження за тим, як час відповіді деградує під навантаженням.
 
-### Task 2 — Load Testing
+### Завдання 2 — Навантажувальне тестування
 
-Write load test scenarios that:
+Напишіть сценарії навантажувального тестування, які:
 
-1. **Smoke test**: 1 virtual user, 1 minute — verify the API responds correctly under minimal load
-2. **Average load test**: 50 virtual users, 5 minutes — simulate normal traffic
+1. **Smoke-тест**: 1 віртуальний користувач, 1 хвилина — перевірити, що API коректно відповідає при мінімальному навантаженні
+2. **Тест середнього навантаження**: 50 віртуальних користувачів, 5 хвилин — симуляція нормального трафіку
 
-For each scenario, collect and report:
+Для кожного сценарію зберіть та повідомте:
 
-- Average response time (p50)
-- 95th percentile response time (p95)
-- 99th percentile response time (p99)
-- Requests per second (RPS)
-- Error rate (%)
+- Середній час відповіді (p50)
+- 95-й перцентиль часу відповіді (p95)
+- 99-й перцентиль часу відповіді (p99)
+- Запити на секунду (RPS)
+- Частка помилок (%)
 
-**Example — NBomber Smoke Test**
+**Приклад — smoke-тест NBomber**
 
 ```csharp
 using NBomber.CSharp;
@@ -169,7 +169,7 @@ public class LoadTests
             .RegisterScenarios(scenario)
             .Run();
 
-        // Verify results
+        // Перевірка результатів
         var stats = result.ScenarioStats[0];
         Assert.True(stats.Fail.Request.Count == 0,
             $"Expected zero failures but got {stats.Fail.Request.Count}");
@@ -177,7 +177,7 @@ public class LoadTests
 }
 ```
 
-**Example — k6 Average Load Test**
+**Приклад — тест середнього навантаження k6**
 
 ```javascript
 import http from 'k6/http';
@@ -185,13 +185,13 @@ import { check, sleep } from 'k6';
 
 export const options = {
   stages: [
-    { duration: '30s', target: 50 },  // ramp up
-    { duration: '4m',  target: 50 },  // hold
-    { duration: '30s', target: 0 },   // ramp down
+    { duration: '30s', target: 50 },  // наростання
+    { duration: '4m',  target: 50 },  // утримання
+    { duration: '30s', target: 0 },   // зниження
   ],
   thresholds: {
-    http_req_duration: ['p(95)<500'],  // 95 % of requests must complete < 500 ms
-    http_req_failed:   ['rate<0.01'],  // error rate < 1 %
+    http_req_duration: ['p(95)<500'],  // 95 % запитів мають завершитись < 500 мс
+    http_req_failed:   ['rate<0.01'],  // частка помилок < 1 %
   },
 };
 
@@ -205,31 +205,31 @@ export default function () {
 }
 ```
 
-**Expected Behavior**
+**Очікувана поведінка**
 
-| Scenario | Expected p95 | Expected Error Rate | Expected RPS |
-|----------|-------------|---------------------|-------------|
-| Smoke (1 VU) | < 200 ms | 0 % | ~1 |
-| Average load (50 VU) | < 500 ms | < 1 % | ~40-50 |
+| Сценарій | Очікуваний p95 | Очікувана частка помилок | Очікуваний RPS |
+|----------|---------------|--------------------------|----------------|
+| Smoke (1 VU) | < 200 мс | 0 % | ~1 |
+| Середнє навантаження (50 VU) | < 500 мс | < 1 % | ~40-50 |
 
-> These are rough targets. Actual values depend on your hardware and `Task.Delay` settings. Record your real measurements and explain deviations.
+> Це приблизні цільові значення. Фактичні значення залежать від вашого обладнання та налаштувань `Task.Delay`. Запишіть ваші реальні вимірювання та поясніть відхилення.
 
-**Minimum test count for Task 2**: 2 test methods/scripts (one per scenario).
+**Мінімальна кількість тестів для Завдання 2**: 2 тестових методи/скрипти (по одному на сценарій).
 
-> **Hint**: Always start the API in Release mode (`dotnet run -c Release`) for consistent results. Debug mode includes extra overhead that skews measurements.
+> **Підказка**: Завжди запускайте API у режимі Release (`dotnet run -c Release`) для узгоджених результатів. Режим Debug включає додаткове навантаження, яке спотворює вимірювання.
 
-### Task 3 — Stress Testing
+### Завдання 3 — Стрес-тестування
 
-Write stress test scenarios:
+Напишіть сценарії стрес-тестування:
 
-1. **Ramp-up stress test**: Gradually increase users from 10 to 500 over 10 minutes. Identify the breaking point where error rate exceeds 5%.
+1. **Тест з поступовим наростанням**: Поступово збільшуйте кількість користувачів з 10 до 500 протягом 10 хвилин. Визначте точку відмови, де частка помилок перевищує 5%.
 
-Document:
+Задокументуйте:
 
-- At what load does the API start failing?
-- What is the maximum RPS before error rate exceeds 1%?
+- При якому навантаженні API починає відмовляти?
+- Який максимальний RPS до того, як частка помилок перевищить 1%?
 
-**Example — NBomber Ramp-Up Stress Test**
+**Приклад — стрес-тест з поступовим наростанням NBomber**
 
 ```csharp
 var scenario = Scenario.Create("stress_ramp_up", async context =>
@@ -248,41 +248,41 @@ var scenario = Scenario.Create("stress_ramp_up", async context =>
 );
 ```
 
-**Expected Behavior**
+**Очікувана поведінка**
 
-| Phase (RPS target) | Expected p95 | Expected Error Rate | Notes |
-|---------------------|-------------|---------------------|-------|
-| 10 RPS | < 200 ms | 0 % | Baseline / warm-up |
-| 50 RPS | < 400 ms | 0 % | Normal capacity |
-| 100 RPS | < 800 ms | < 1 % | Approaching limits |
-| 250 RPS | < 2000 ms | 1-5 % | Degradation expected |
-| 500 RPS | > 2000 ms | > 5 % | Breaking point likely |
+| Фаза (цільовий RPS) | Очікуваний p95 | Очікувана частка помилок | Примітки |
+|----------------------|---------------|--------------------------|----------|
+| 10 RPS | < 200 мс | 0 % | Базовий рівень / розігрів |
+| 50 RPS | < 400 мс | 0 % | Нормальна потужність |
+| 100 RPS | < 800 мс | < 1 % | Наближення до меж |
+| 250 RPS | < 2000 мс | 1-5 % | Очікується деградація |
+| 500 RPS | > 2000 мс | > 5 % | Ймовірна точка відмови |
 
-**Minimum test count for Task 3**: 1 test method/script (ramp-up stress test).
+**Мінімальна кількість тестів для Завдання 3**: 1 тестовий метод/скрипт (стрес-тест з поступовим наростанням).
 
-### Task 4 — Results Report
+### Завдання 4 — Звіт про результати
 
-Create a `REPORT.md` with:
+Створіть `REPORT.md` з:
 
-1. Summary table of all test results
-2. Identified bottlenecks and recommended optimizations
+1. Зведеною таблицею всіх результатів тестування
+2. Виявленими вузькими місцями та рекомендованими оптимізаціями
 
-## Grading
+## Оцінювання
 
-| Criteria |
+| Критерії |
 |----------|
-| Task 1 — API setup |
-| Task 2 — Load test scenarios |
-| Task 3 — Stress test scenarios |
-| Task 4 — Results report |
+| Завдання 1 — Налаштування API |
+| Завдання 2 — Сценарії навантажувального тестування |
+| Завдання 3 — Сценарії стрес-тестування |
+| Завдання 4 — Звіт про результати |
 
-## Submission
+## Здача роботи
 
-- API project and test scripts/projects
-- `REPORT.md` with results, tables, and analysis
-- Generated HTML reports from k6/NBomber
+- Проєкт API та тестові скрипти/проєкти
+- `REPORT.md` з результатами, таблицями та аналізом
+- Згенеровані HTML-звіти від k6/NBomber
 
-## References
+## Посилання
 
 - [NBomber Documentation](https://nbomber.com/docs/getting-started/overview/)
 - [NBomber.Http Plugin](https://nbomber.com/docs/plugins/http/)

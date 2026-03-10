@@ -1,75 +1,75 @@
-# Lab 14 — Individual Project Defense: Work Session
+# Лабораторна 14 — Захист індивідуального проекту: робоча сесія
 
-## Objective
+## Мета
 
-Continue working on your individual testing project. Use this lab session to implement tests, get feedback from the instructor, and prepare for defense in Lab 15.
+Продовжити роботу над індивідуальним проектом з тестування. Використати цю лабораторну сесію для реалізації тестів, отримання зворотного зв'язку від викладача та підготовки до захисту на Лабораторній 15.
 
-## Session Structure
+## Структура сесії
 
-### Check-in (first 15 min)
+### Перевірка (перші 15 хв)
 
-Show the instructor:
-1. Your project repository and current progress
-2. Which test types you have completed
-3. Any blockers or questions
+Покажіть викладачу:
+1. Ваш репозиторій проекту та поточний прогрес
+2. Які типи тестів ви вже виконали
+3. Будь-які блокери або запитання
 
-### Work Time (1.5-2 hours)
+### Робочий час (1.5-2 години)
 
-Focus on completing the remaining requirements from Lab 13:
+Зосередьтеся на виконанні залишкових вимог з Лабораторної 13:
 
-#### Checklist
+#### Чеклист
 
-- [ ] Application has at least 3 API endpoints with business logic
-- [ ] **Unit tests** (≥ 15) with NSubstitute for mocking
-- [ ] **Integration tests** (≥ 8) with WebApplicationFactory
-- [ ] **Database tests** (≥ 6) with Testcontainers
-- [ ] **k6 scripts** (3 scenarios: smoke, load, stress)
-- [ ] Code coverage ≥ 80% (run and verify with Coverlet)
-- [ ] All tests pass: `dotnet test --verbosity normal`
-- [ ] Project `README.md` with build/run/test instructions
+- [ ] Застосунок має щонайменше 3 API-ендпоінти з бізнес-логікою
+- [ ] **Модульні тести** (≥ 15) з NSubstitute для мокування
+- [ ] **Інтеграційні тести** (≥ 8) з WebApplicationFactory
+- [ ] **Тести бази даних** (≥ 6) з Testcontainers
+- [ ] **Скрипти k6** (3 сценарії: smoke, навантажувальний, стрес)
+- [ ] Покриття коду ≥ 80% (запустіть та перевірте за допомогою Coverlet)
+- [ ] Усі тести проходять: `dotnet test --verbosity normal`
+- [ ] `README.md` проекту з інструкціями збірки/запуску/тестування
 
-### Quick Commands Reference
+### Короткий довідник команд
 
 ```bash
-# Run all tests
+# Запуск усіх тестів
 dotnet test --verbosity normal
 
-# Run with coverage
+# Запуск з покриттям
 dotnet test --collect:"XPlat Code Coverage" --results-directory ./coverage
 
-# Generate coverage report
+# Генерація звіту покриття
 reportgenerator \
   -reports:./coverage/**/coverage.cobertura.xml \
   -targetdir:./coverage/report \
   -reporttypes:"Html;TextSummary"
 
-# View coverage summary
+# Перегляд зведення покриття
 cat ./coverage/report/Summary.txt
 
-# Run k6 smoke test
+# Запуск k6 smoke-тесту
 k6 run k6/smoke-test.js
 
-# Run k6 load test
+# Запуск k6 навантажувального тесту
 k6 run k6/load-test.js
 ```
 
-### Review (last 15 min)
+### Огляд (останні 15 хв)
 
-Brief check with the instructor:
-- Confirm all requirements are met
-- Get feedback on test quality
-- Prepare for defense questions
+Коротка перевірка з викладачем:
+- Підтвердження виконання всіх вимог
+- Отримання зворотного зв'язку щодо якості тестів
+- Підготовка до запитань на захисті
 
-## Common Issues and Solutions
+## Типові проблеми та рішення
 
-| Issue | Solution |
+| Проблема | Рішення |
 |---|---|
-| Testcontainers fails to start | Ensure Docker is running: `docker info` |
-| Low code coverage | Check which classes/methods are uncovered in the HTML report |
-| k6 connection refused | Make sure the API is running before executing k6 |
-| Tests interfere with each other | Use fresh database per test class, avoid shared mutable state |
-| WebApplicationFactory doesn't find Program | Add `public partial class Program { }` to `Program.cs` |
+| Testcontainers не запускаються | Переконайтеся, що Docker працює: `docker info` |
+| Низьке покриття коду | Перевірте, які класи/методи не покриті, в HTML-звіті |
+| k6 — відмова з'єднання | Переконайтеся, що API запущений перед виконанням k6 |
+| Тести впливають один на одного | Використовуйте окрему базу даних для кожного тестового класу, уникайте спільного змінного стану |
+| WebApplicationFactory не знаходить Program | Додайте `public partial class Program { }` до `Program.cs` |
 
-## Reminder
+## Нагадування
 
-Your defense is in **Lab 15**. Make sure your repository is pushed and the README is complete before the session.
+Ваш захист відбудеться на **Лабораторній 15**. Переконайтеся, що ваш репозиторій завантажений та README завершений до початку сесії.

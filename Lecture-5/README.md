@@ -1,8 +1,8 @@
-# Lecture 5: Performance Testing with k6
+# Лекція 5: Тестування продуктивності з k6
 
-## Learning Objectives
+## Навчальні цілі
 
-By the end of this lecture, students will be able to:
+Після завершення цієї лекції студенти зможуть:
 
 - Explain why performance testing matters and identify different types of performance tests
 - Describe key performance metrics: response time, throughput, error rate, and percentiles
@@ -16,11 +16,11 @@ By the end of this lecture, students will be able to:
 
 ---
 
-## 1. Why Performance Testing Matters
+## 1. Чому тестування продуктивності має значення
 
-### 1.1 Performance Failures in the Real World
+### 1.1 Збої продуктивності в реальному світі
 
-Functional correctness is necessary but not sufficient. A system that returns the right answer in 30 seconds is, for practical purposes, broken.
+Функціональна коректність необхідна, але недостатня. Система, що повертає правильну відповідь за 30 секунд, для практичних цілей є зламаною.
 
 | Incident | Year | Impact |
 |---|---|---|
@@ -32,9 +32,9 @@ Functional correctness is necessary but not sufficient. A system that returns th
 
 > **Discussion (5 min):** Have you experienced a slow or unresponsive application? Did you abandon it? How long did you wait before giving up?
 
-### 1.2 The Cost of Poor Performance
+### 1.2 Вартість поганої продуктивності
 
-Research consistently shows that performance directly impacts business outcomes:
+Дослідження постійно показують, що продуктивність безпосередньо впливає на бізнес-результати:
 
 ```
 Response Time vs. User Behavior:
@@ -53,7 +53,7 @@ Key statistics:
 - **Amazon:** Every 100ms of latency costs roughly 1% in sales
 - **Walmart:** Every 1-second improvement in page load time increased conversions by 2%
 
-### 1.3 Performance Testing vs. Functional Testing
+### 1.3 Тестування продуктивності vs. Функціональне тестування
 
 | Aspect | Functional Testing | Performance Testing |
 |---|---|---|
@@ -64,7 +64,7 @@ Key statistics:
 | **When** | Every code change | Before releases, after infra changes |
 | **Example** | "Login returns a token" | "Login completes in < 200ms at 1000 RPS" |
 
-### 1.4 When to Perform Performance Testing
+### 1.4 Коли проводити тестування продуктивності
 
 ```
 Development Lifecycle and Performance Testing:
@@ -77,7 +77,7 @@ Development Lifecycle and Performance Testing:
                   (estimates)  (BenchmarkDotNet) (k6)     (k6)        (APM tools)
 ```
 
-Performance testing is most valuable:
+Тестування продуктивності найцінніше:
 - **Before major releases** — verify the system can handle expected traffic
 - **After infrastructure changes** — new database, new cloud region, new hosting
 - **After architecture changes** — new caching layer, new message queue, API redesign
@@ -85,11 +85,11 @@ Performance testing is most valuable:
 
 ---
 
-## 2. Types of Performance Testing
+## 2. Типи тестування продуктивності
 
-### 2.1 Overview
+### 2.1 Огляд
 
-Different types of performance tests answer different questions:
+Різні типи тестів продуктивності відповідають на різні питання:
 
 ```
                             Users / Load
@@ -109,7 +109,7 @@ Different types of performance tests answer different questions:
                               └──────────────────────────────► Time
 ```
 
-### 2.2 Load Testing
+### 2.2 Навантажувальне тестування
 
 **Question:** Can the system handle the expected number of concurrent users?
 
@@ -133,7 +133,7 @@ VUs
 - Validates that performance meets SLAs under typical conditions
 - Example: "100 concurrent users browsing and placing orders during business hours"
 
-### 2.3 Stress Testing
+### 2.3 Стресове тестування
 
 **Question:** What happens when load exceeds the expected maximum?
 
@@ -156,7 +156,7 @@ VUs
 - Identifies the breaking point and failure behavior
 - Answers: Does the system degrade gracefully or crash catastrophically?
 
-### 2.4 Spike Testing
+### 2.4 Пікове тестування
 
 **Question:** Can the system handle sudden, dramatic increases in traffic?
 
@@ -179,7 +179,7 @@ VUs
 - Tests auto-scaling capabilities
 - Example: "Traffic jumps from 100 to 10,000 users in 30 seconds"
 
-### 2.5 Soak (Endurance) Testing
+### 2.5 Тривале (Endurance) тестування
 
 **Question:** Does the system remain stable over extended periods?
 
@@ -200,7 +200,7 @@ VUs
 - Detects memory leaks, connection pool exhaustion, disk space issues, log file growth
 - Example: "500 users continuously active for 8 hours"
 
-### 2.6 Scalability Testing
+### 2.6 Тестування масштабованості
 
 **Question:** How does the system perform as resources or load scale up?
 
@@ -208,7 +208,7 @@ VUs
 - Measures whether performance scales linearly, sub-linearly, or hits a plateau
 - Example: "Does doubling the servers double the throughput?"
 
-### 2.7 Summary Table
+### 2.7 Підсумкова таблиця
 
 | Type | Load Level | Duration | Goal |
 |---|---|---|---|
@@ -222,15 +222,15 @@ VUs
 
 ---
 
-## 3. Performance Testing Metrics
+## 3. Метрики тестування продуктивності
 
-### 3.1 Core Metrics
+### 3.1 Основні метрики
 
-Understanding these metrics is essential for interpreting performance test results:
+Розуміння цих метрик є необхідним для інтерпретації результатів тестів продуктивності:
 
-#### Response Time (Latency)
+#### Час відповіді (Затримка)
 
-The time between sending a request and receiving the complete response.
+Час між відправкою запиту та отриманням повної відповіді.
 
 ```
 Client                                              Server
@@ -247,32 +247,32 @@ Client                                              Server
 - **Measured in:** Milliseconds (ms) or seconds (s)
 - **Typical SLAs:** API < 200ms, web page < 2s, database query < 50ms
 
-#### Throughput
+#### Пропускна здатність
 
-The number of requests the system processes per unit of time.
+Кількість запитів, які система обробляє за одиницю часу.
 
 - **Measured in:** Requests per second (RPS) or transactions per second (TPS)
 - **Higher is better** (assuming acceptable response times)
 - Example: "The API handles 5,000 RPS with p95 latency under 100ms"
 
-#### Error Rate
+#### Частота помилок
 
-The percentage of requests that result in errors (HTTP 4xx/5xx, timeouts, connection failures).
+Відсоток запитів, що призводять до помилок (HTTP 4xx/5xx, тайм-аути, збої з'єднання).
 
 - **Measured in:** Percentage (%)
 - **Target:** < 0.1% for most production systems
 - **Watch for:** Error rate increasing under load indicates the system is failing
 
-#### Concurrent Users / Virtual Users (VUs)
+#### Одночасні користувачі / Віртуальні користувачі (VUs)
 
-The number of simulated users actively making requests at the same time.
+Кількість імітованих користувачів, що активно надсилають запити одночасно.
 
 - Not the same as "total users" — concurrent users are those actively sending requests
 - A system with 10,000 registered users might have 500 concurrent users at peak
 
-### 3.2 Percentiles: Why Averages Lie
+### 3.2 Перцентилі: Чому середні значення брешуть
 
-**Averages hide outliers.** Consider this scenario:
+**Середні значення приховують викиди.** Розглянемо цей сценарій:
 
 ```
 9 requests at 50ms + 1 request at 5000ms
@@ -285,7 +285,7 @@ but 90% of users experienced 50ms.
 The 1 unlucky user waited 5 seconds.
 ```
 
-Percentiles give a more accurate picture:
+Перцентилі дають більш точну картину:
 
 | Percentile | Meaning | Use Case |
 |---|---|---|
@@ -319,7 +319,7 @@ Requests
 
 > **Key insight:** Always monitor p95 and p99, not just the average. If your average is 100ms but your p99 is 10 seconds, 1% of your users are having a terrible experience.
 
-### 3.3 Other Important Metrics
+### 3.3 Інші важливі метрики
 
 | Metric | Description | Why It Matters |
 |---|---|---|
@@ -334,20 +334,20 @@ Requests
 
 ---
 
-## 4. Introduction to k6
+## 4. Вступ до k6
 
-### 4.1 What is k6?
+### 4.1 Що таке k6?
 
-**k6** is an open-source load testing tool designed for developers. It was acquired by Grafana Labs in 2021.
+**k6** — це інструмент навантажувального тестування з відкритим кодом, розроблений для розробників. Був придбаний Grafana Labs у 2021 році.
 
-Key characteristics:
+Ключові характеристики:
 - **Developer-centric** — tests are written in JavaScript (ES6+)
 - **CLI-first** — runs from the command line, integrates with CI/CD
 - **Performance-focused** — the engine is written in Go for efficiency
 - **Scriptable** — full JavaScript API for complex test scenarios
 - **Extensible** — supports custom metrics, outputs, and extensions
 
-### 4.2 k6 Architecture
+### 4.2 Архітектура k6
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -383,7 +383,7 @@ Key characteristics:
 - The **JavaScript VM** (goja, a Go-based JS engine) executes your test scripts
 - This design means k6 is **much more efficient** than tools that run real browsers or Node.js per VU
 
-### 4.3 Why k6?
+### 4.3 Чому k6?
 
 | Feature | k6 | JMeter | Gatling | Locust |
 |---|---|---|---|---|
@@ -399,9 +399,9 @@ Key characteristics:
 
 ---
 
-## 5. Installing k6
+## 5. Встановлення k6
 
-### 5.1 Installation
+### 5.1 Встановлення
 
 #### macOS
 
@@ -437,14 +437,14 @@ sudo apt-get install k6
 docker run --rm -i grafana/k6 run - < script.js
 ```
 
-### 5.2 Verify Installation
+### 5.2 Перевірка встановлення
 
 ```bash
 k6 version
 # Output: k6 v1.2.0 (go1.23.4, linux/amd64)
 ```
 
-### 5.3 Your First k6 Run
+### 5.3 Ваш перший запуск k6
 
 Create a file `hello.js`:
 
@@ -464,15 +464,15 @@ Run it:
 k6 run hello.js
 ```
 
-You should see output with metrics like `http_req_duration`, `http_reqs`, and `vus`.
+Ви повинні побачити вивід з метриками, такими як `http_req_duration`, `http_reqs` та `vus`.
 
 ---
 
-## 6. k6 Script Anatomy
+## 6. Анатомія скрипта k6
 
-### 6.1 The Four Lifecycle Stages
+### 6.1 Чотири етапи життєвого циклу
 
-A k6 script has four distinct stages that execute in a specific order:
+Скрипт k6 має чотири окремі етапи, що виконуються в певному порядку:
 
 ```javascript
 // 1. INIT CODE — runs once per VU, before anything else
@@ -526,7 +526,7 @@ export function teardown(data) {
 }
 ```
 
-### 6.2 Lifecycle Execution Flow
+### 6.2 Потік виконання життєвого циклу
 
 ```
 ┌────────────────────────────────────────────────────────────────┐
@@ -557,7 +557,7 @@ export function teardown(data) {
 └────────────────────────────────────────────────────────────────┘
 ```
 
-### 6.3 Important Rules
+### 6.3 Важливі правила
 
 | Rule | Detail |
 |---|---|
@@ -569,9 +569,9 @@ export function teardown(data) {
 
 ---
 
-## 7. Virtual Users (VUs) and Iterations
+## 7. Віртуальні користувачі (VUs) та ітерації
 
-### 7.1 What is a Virtual User?
+### 7.1 Що таке віртуальний користувач?
 
 A **Virtual User (VU)** is a simulated user that executes the `default` function in a loop. Each VU:
 - Is an independent "thread" of execution
@@ -584,7 +584,7 @@ VU 2: ──[iteration 1]──[iteration 2]──[iteration 3]──► ...
 VU 3: ──[iteration 1]──[iteration 2]──[iteration 3]──► ...
 ```
 
-### 7.2 Configuring VUs and Duration
+### 7.2 Налаштування VUs та тривалості
 
 ```javascript
 // Option 1: Fixed VUs for a duration
@@ -603,9 +603,9 @@ export const options = {
 // k6 run --vus 50 --duration 1m script.js
 ```
 
-### 7.3 VUs vs. Iterations vs. Requests
+### 7.3 VUs vs. Ітерації vs. Запити
 
-These terms are often confused:
+Ці терміни часто плутають:
 
 ```
 1 VU, 1 iteration of default():
@@ -627,7 +627,7 @@ Result: 1 iteration = 3 HTTP requests
 | **Iteration** | One complete execution of the `default` function |
 | **Request** | A single HTTP call within an iteration |
 
-### 7.4 Think Time
+### 7.4 Час роздумів
 
 Real users do not fire requests as fast as possible. They read pages, fill forms, and click buttons. **Think time** simulates this behavior:
 
@@ -647,13 +647,13 @@ Without `sleep()`, each VU sends requests as fast as the server responds, which 
 
 ---
 
-## 8. k6 Scenarios and Executors
+## 8. Сценарії та виконавці k6
 
-### 8.1 What Are Scenarios?
+### 8.1 Що таке сценарії?
 
-Scenarios allow you to define **multiple, independent workloads** within a single test script. Each scenario can use a different executor, load profile, and even target different functions.
+Сценарії дозволяють визначити **кілька незалежних робочих навантажень** в одному тестовому скрипті. Кожен сценарій може використовувати інший виконавець, профіль навантаження та навіть цільову функцію.
 
-### 8.2 Executors
+### 8.2 Виконавці
 
 Executors control **how k6 schedules VUs and iterations**:
 
@@ -768,9 +768,9 @@ export const options = {
 };
 ```
 
-### 8.7 Multiple Scenarios
+### 8.7 Кілька сценаріїв
 
-You can run different workloads simultaneously:
+Ви можете запускати різні робочі навантаження одночасно:
 
 ```javascript
 export const options = {
@@ -2088,7 +2088,7 @@ You are given an ASP.NET Core API for a bookstore (or use any API you have from 
 
 ## 20. Summary
 
-### Key Takeaways
+### Ключові висновки
 
 1. **Performance testing is not optional** — functional correctness means nothing if the system cannot handle real-world load
 2. **Different test types answer different questions** — load, stress, spike, and soak tests each reveal different failure modes
@@ -2101,7 +2101,7 @@ You are given an ASP.NET Core API for a bookstore (or use any API you have from 
 9. **Test progressively** — smoke, then load, then stress, then spike, then soak
 10. **BenchmarkDotNet complements k6** — use it for micro-level C# code optimization
 
-### Preview of Next Lecture
+### Анонс наступної лекції
 
 In **Lecture 6: Test Design Techniques and Code Coverage**, we will:
 - Explore black-box test design techniques: equivalence partitioning, boundary value analysis, decision tables
@@ -2112,7 +2112,7 @@ In **Lecture 6: Test Design Techniques and Code Coverage**, we will:
 
 ---
 
-## References and Further Reading
+## Посилання та додаткова література
 
 - **k6 Documentation** — https://grafana.com/docs/k6/latest/
 - **k6 Examples and Guides** — https://grafana.com/docs/k6/latest/examples/

@@ -1,42 +1,42 @@
-# Lab 9 — Services Testing: REST API
+# Лабораторна 9 — Тестування сервісів: REST API
 
-## Objective
+## Мета
 
-Test external REST API integrations using HTTP client abstraction, response handling, retry policies, and simulated API behavior with WireMock.
+Тестування інтеграцій з зовнішніми REST API з використанням абстракції HTTP-клієнта, обробки відповідей, політик повторних спроб та симуляції поведінки API за допомогою WireMock.
 
-**Duration:** 60 minutes
+**Тривалість:** 60 хвилин
 
-## Prerequisites
+## Передумови
 
-- .NET 10 SDK or later installed
-- C# fundamentals including interfaces, dependency injection, and async/await
-- Understanding of HTTP methods (GET, POST, PUT, DELETE), status codes, and headers
-- Familiarity with `HttpClient` and `IHttpClientFactory` in .NET
-- Understanding of JSON serialization/deserialization with `System.Text.Json`
-- Basic knowledge of resilience patterns: retries, circuit breakers, and timeouts
+- Встановлений .NET 10 SDK або новіший
+- Основи C#, включаючи інтерфейси, впровадження залежностей та async/await
+- Розуміння HTTP-методів (GET, POST, PUT, DELETE), кодів стану та заголовків
+- Знайомство з `HttpClient` та `IHttpClientFactory` у .NET
+- Розуміння серіалізації/десеріалізації JSON з `System.Text.Json`
+- Базові знання шаблонів стійкості: повторні спроби, переривач ланцюга та тайм-аути
 
-## Key Concepts
+## Ключові концепції
 
-| Concept | Description |
-|---------|-------------|
-| **Typed HttpClient** | A strongly-typed wrapper around `HttpClient` registered via `IHttpClientFactory`. Provides clean separation and testability. |
-| **WireMock.Net** | An in-process HTTP server that can be programmed to return specific responses for specific requests. Replaces a real external API during tests. |
-| **Stub vs Mock (HTTP context)** | A WireMock stub returns a canned response. A WireMock mock also verifies that certain requests were made (request verification). |
-| **Resilience Pipeline** | A chain of strategies (retry, circuit breaker, timeout) applied to outgoing HTTP requests via `Microsoft.Extensions.Http.Resilience`. |
-| **Retry Policy** | Automatically re-sends a failed request a configured number of times, with optional backoff between attempts. Targets transient faults (5xx, network errors). |
-| **Circuit Breaker** | Monitors failure rates and "opens" (blocks all requests) when failures exceed a threshold, preventing cascading failures. After a cooldown, it "half-opens" to probe recovery. |
-| **Attempt Timeout** | Cancels a single HTTP request if it does not complete within a configured duration. Different from an overall timeout across retries. |
-| **IAsyncLifetime** | An xUnit interface for async setup (`InitializeAsync`) and teardown (`DisposeAsync`). Used to start and stop the WireMock server per test class. |
+| Концепція | Опис |
+|-----------|------|
+| **Типізований HttpClient** | Строго типізована обгортка навколо `HttpClient`, зареєстрована через `IHttpClientFactory`. Забезпечує чітке розділення та тестованість. |
+| **WireMock.Net** | Внутрішньопроцесний HTTP-сервер, який можна запрограмувати для повернення конкретних відповідей на конкретні запити. Замінює реальний зовнішній API під час тестів. |
+| **Заглушка vs Мок (контекст HTTP)** | Заглушка WireMock повертає заготовлену відповідь. Мок WireMock також перевіряє, що певні запити були зроблені (верифікація запитів). |
+| **Конвеєр стійкості** | Ланцюг стратегій (повторна спроба, переривач ланцюга, тайм-аут), що застосовуються до вихідних HTTP-запитів через `Microsoft.Extensions.Http.Resilience`. |
+| **Політика повторних спроб** | Автоматично повторно надсилає невдалий запит налаштовану кількість разів із необов'язковою затримкою між спробами. Спрямована на тимчасові збої (5xx, мережеві помилки). |
+| **Переривач ланцюга** | Моніторить частоту збоїв і "відкривається" (блокує всі запити), коли збої перевищують поріг, запобігаючи каскадним збоям. Після періоду охолодження "напіввідкривається" для перевірки відновлення. |
+| **Тайм-аут спроби** | Скасовує окремий HTTP-запит, якщо він не завершується протягом налаштованої тривалості. Відрізняється від загального тайм-ауту для всіх повторних спроб. |
+| **IAsyncLifetime** | Інтерфейс xUnit для асинхронного налаштування (`InitializeAsync`) та очищення (`DisposeAsync`). Використовується для запуску та зупинки сервера WireMock для кожного класу тестів. |
 
-## Tools
+## Інструменти
 
-- Language: C#
+- Мова: C#
 - HTTP: `HttpClient` / `IHttpClientFactory`
-- Mock Server: [WireMock.Net](https://github.com/WireMock-Net/WireMock.Net)
-- Resilience: [Microsoft.Extensions.Http.Resilience](https://learn.microsoft.com/en-us/dotnet/core/resilience)
-- Framework: [xUnit v3](https://xunit.net/) (`xunit.v3`)
+- Мок-сервер: [WireMock.Net](https://github.com/WireMock-Net/WireMock.Net)
+- Стійкість: [Microsoft.Extensions.Http.Resilience](https://learn.microsoft.com/en-us/dotnet/core/resilience)
+- Фреймворк: [xUnit v3](https://xunit.net/) (`xunit.v3`)
 
-## Setup
+## Налаштування
 
 ```bash
 dotnet new sln -n Lab9
@@ -52,11 +52,11 @@ dotnet add Lab9.Tests package WireMock.Net
 dotnet add Lab9.Tests package Shouldly
 ```
 
-## Tasks
+## Завдання
 
-### Task 1 — External API Client
+### Завдання 1 — Клієнт зовнішнього API
 
-Create a typed HTTP client for a hypothetical User API:
+Створіть типізований HTTP-клієнт для гіпотетичного User API:
 
 ```csharp
 public interface IUserApiClient
@@ -71,19 +71,19 @@ public interface IUserApiClient
 public class UserApiClient : IUserApiClient
 {
     private readonly HttpClient _httpClient;
-    // Implement all methods with proper error handling
-    // Map HTTP status codes to appropriate exceptions
+    // Реалізуйте всі методи з належною обробкою помилок
+    // Зіставте HTTP-коди стану з відповідними винятками
 }
 ```
 
-Implement:
+Реалізуйте:
 
-- Proper deserialization of responses
-- Throw `NotFoundException` for 404
-- Throw `ApiException` for 5xx with retry info
-- Map validation errors (400) to `ValidationException`
+- Належну десеріалізацію відповідей
+- Генерацію `NotFoundException` для 404
+- Генерацію `ApiException` для 5xx з інформацією про повторну спробу
+- Зіставлення помилок валідації (400) з `ValidationException`
 
-**Example — Domain Models and Custom Exceptions**
+**Приклад — доменні моделі та користувацькі винятки**
 
 ```csharp
 public record User(int Id, string Name, string Email);
@@ -110,7 +110,7 @@ public class ValidationException : Exception
 }
 ```
 
-**Example — UserApiClient Implementation (partial)**
+**Приклад — реалізація UserApiClient (частково)**
 
 ```csharp
 public class UserApiClient : IUserApiClient
@@ -140,26 +140,26 @@ public class UserApiClient : IUserApiClient
             ?? throw new InvalidOperationException("Null response body");
     }
 
-    // Implement remaining methods following the same pattern...
+    // Реалізуйте решту методів за тим самим шаблоном...
 }
 ```
 
-**Expected Status Code Mapping**
+**Очікуване зіставлення кодів стану**
 
-| HTTP Status Code | Expected Behavior |
-|-----------------|-------------------|
-| 200 OK | Deserialize and return the response body |
-| 201 Created | Deserialize the created entity from the response body |
-| 204 No Content | Return successfully (no body to parse) |
-| 400 Bad Request | Throw `ValidationException` with field-level error details |
-| 404 Not Found | Throw `NotFoundException` with a descriptive message |
-| 500 Internal Server Error | Throw `ApiException` with the status code |
-| 502 Bad Gateway | Throw `ApiException` (transient, eligible for retry) |
-| 503 Service Unavailable | Throw `ApiException` (transient, eligible for retry) |
+| HTTP-код стану | Очікувана поведінка |
+|----------------|---------------------|
+| 200 OK | Десеріалізувати та повернути тіло відповіді |
+| 201 Created | Десеріалізувати створену сутність з тіла відповіді |
+| 204 No Content | Повернути успішно (тіло для розбору відсутнє) |
+| 400 Bad Request | Згенерувати `ValidationException` з деталями помилок на рівні полів |
+| 404 Not Found | Згенерувати `NotFoundException` з описовим повідомленням |
+| 500 Internal Server Error | Згенерувати `ApiException` з кодом стану |
+| 502 Bad Gateway | Згенерувати `ApiException` (тимчасова помилка, підлягає повторній спробі) |
+| 503 Service Unavailable | Згенерувати `ApiException` (тимчасова помилка, підлягає повторній спробі) |
 
-**Minimum test count for Task 1**: 4 tests (covering the main interface methods verifying the happy path).
+**Мінімальна кількість тестів для Завдання 1**: 4 тести (покриття основних методів інтерфейсу, перевірка успішного шляху).
 
-> **Hint**: Register `UserApiClient` as a typed client so `IHttpClientFactory` manages its `HttpClient` lifetime. This avoids socket exhaustion:
+> **Підказка**: Зареєструйте `UserApiClient` як типізований клієнт, щоб `IHttpClientFactory` керував часом життя його `HttpClient`. Це запобігає вичерпанню сокетів:
 > ```csharp
 > services.AddHttpClient<IUserApiClient, UserApiClient>(client =>
 > {
@@ -167,27 +167,27 @@ public class UserApiClient : IUserApiClient
 > });
 > ```
 
-### Task 2 — WireMock Integration Tests
+### Завдання 2 — Інтеграційні тести з WireMock
 
-Use WireMock.Net to simulate the external API:
+Використовуйте WireMock.Net для симуляції зовнішнього API:
 
 ```csharp
 var server = WireMockServer.Start();
 ```
 
-Write tests that:
+Напишіть тести, які:
 
-1. Mock `GET /users/1` returning a JSON user — verify deserialization
-2. Mock `GET /users/999` returning 404 — verify `NotFoundException` is thrown
-3. Mock `POST /users` returning 201 with `Location` header — verify response parsing
-4. Mock `GET /users` with query parameters — verify pagination is sent correctly
+1. Імітують `GET /users/1`, що повертає JSON-користувача — перевірте десеріалізацію
+2. Імітують `GET /users/999`, що повертає 404 — перевірте, що генерується `NotFoundException`
+3. Імітують `POST /users`, що повертає 201 із заголовком `Location` — перевірте розбір відповіді
+4. Імітують `GET /users` з параметрами запиту — перевірте, що пагінація надсилається коректно
 
-*Optional (if time allows):*
-- Mock slow response (5 second delay) — verify timeout handling
-- Mock sequence: first call returns 500, second returns 200 — verify retry works
-- Verify request headers (`Content-Type`, `Authorization`) are sent correctly
+*Необов'язково (якщо є час):*
+- Імітувати повільну відповідь (затримка 5 секунд) — перевірити обробку тайм-ауту
+- Імітувати послідовність: перший виклик повертає 500, другий — 200 — перевірити роботу повторних спроб
+- Перевірити, що заголовки запиту (`Content-Type`, `Authorization`) надсилаються коректно
 
-**Example — WireMock Test Fixture with IAsyncLifetime**
+**Приклад — тестова фікстура WireMock з IAsyncLifetime**
 
 ```csharp
 using WireMock.Server;
@@ -255,7 +255,7 @@ public class UserApiClientTests : IAsyncLifetime
 }
 ```
 
-**Example — Testing a Slow Response (Timeout)**
+**Приклад — тестування повільної відповіді (тайм-аут)**
 
 ```csharp
 [Fact]
@@ -275,7 +275,7 @@ public async Task GetUserAsync_ThrowsTaskCanceledException_WhenResponseIsSlowAsy
     var httpClient = new HttpClient
     {
         BaseAddress = new Uri(_server.Url!),
-        Timeout = TimeSpan.FromSeconds(2) // timeout before the 5s delay
+        Timeout = TimeSpan.FromSeconds(2) // тайм-аут до затримки 5 с
     };
     var client = new UserApiClient(httpClient);
 
@@ -285,13 +285,13 @@ public async Task GetUserAsync_ThrowsTaskCanceledException_WhenResponseIsSlowAsy
 }
 ```
 
-**Example — Testing Retry with Response Sequence**
+**Приклад — тестування повторної спроби з послідовністю відповідей**
 
 ```csharp
 [Fact]
 public async Task GetUserAsync_RetriesAndSucceeds_WhenFirstCallFailsAsync()
 {
-    // Arrange: first call returns 500, second returns 200
+    // Arrange: перший виклик повертає 500, другий — 200
     _server
         .Given(Request.Create().WithPath("/users/1").UsingGet())
         .InScenario("retry")
@@ -309,7 +309,7 @@ public async Task GetUserAsync_RetriesAndSucceeds_WhenFirstCallFailsAsync()
                 new { Id = 1, Name = "Alice", Email = "alice@example.com" }))
         );
 
-    // Act — the client (or its resilience handler) should retry
+    // Act — клієнт (або його обробник стійкості) повинен повторити спробу
     var user = await _client.GetUserAsync(1);
 
     // Assert
@@ -318,7 +318,7 @@ public async Task GetUserAsync_RetriesAndSucceeds_WhenFirstCallFailsAsync()
 }
 ```
 
-**Example — Verifying Sent Request Headers**
+**Приклад — перевірка надісланих заголовків запиту**
 
 ```csharp
 [Fact]
@@ -338,7 +338,7 @@ public async Task CreateUserAsync_SendsCorrectContentTypeAsync()
     var user = await _client.CreateUserAsync(
         new CreateUserRequest("Bob", "bob@example.com"));
 
-    // Assert — verify WireMock received the correct headers
+    // Assert — перевірка, що WireMock отримав коректні заголовки
     _server.LogEntries.ShouldContain(entry =>
         entry.RequestMessage.Headers!.ContainsKey("Content-Type") &&
         entry.RequestMessage.Headers["Content-Type"]
@@ -346,29 +346,29 @@ public async Task CreateUserAsync_SendsCorrectContentTypeAsync()
 }
 ```
 
-**Minimum test count for Task 2**: 5 tests (4 required scenarios above + at least 1 optional scenario).
+**Мінімальна кількість тестів для Завдання 2**: 5 тестів (4 обов'язкових сценарії вище + щонайменше 1 необов'язковий сценарій).
 
-**Bonus (if time allows):** Configure resilience with `AddStandardResilienceHandler` and test retry behavior.
+**Бонус (якщо є час):** Налаштуйте стійкість за допомогою `AddStandardResilienceHandler` та протестуйте поведінку повторних спроб.
 
-> **Hint**: Always reset the WireMock server between tests if they share an instance. You can call `_server.Reset()` in a setup method, or use `IAsyncLifetime` to create a fresh server per class. If individual test isolation is critical, create the server per-test instead.
+> **Підказка**: Завжди скидайте сервер WireMock між тестами, якщо вони використовують спільний екземпляр. Ви можете викликати `_server.Reset()` у методі налаштування або використовувати `IAsyncLifetime` для створення нового сервера на клас. Якщо ізоляція окремих тестів критична, створюйте сервер для кожного тесту.
 
-> **Hint**: Use WireMock's `InScenario` / `WillSetStateTo` / `WhenStateIs` API to create stateful response sequences (e.g., first call fails, second succeeds).
+> **Підказка**: Використовуйте API `InScenario` / `WillSetStateTo` / `WhenStateIs` WireMock для створення послідовностей відповідей зі станом (наприклад, перший виклик невдалий, другий успішний).
 
-## Grading
+## Оцінювання
 
-| Criteria |
+| Критерії |
 |----------|
-| Task 1 — API client implementation |
-| Task 2 — WireMock tests |
-| Proper exception hierarchy |
-| WireMock server cleanup (IDisposable) |
+| Завдання 1 — Реалізація клієнта API |
+| Завдання 2 — Тести WireMock |
+| Належна ієрархія винятків |
+| Очищення сервера WireMock (IDisposable) |
 
-## Submission
+## Здача роботи
 
-- Solution with `Lab9.Core` and `Lab9.Tests` projects
-- WireMock server started/stopped per test class using `IAsyncLifetime`
+- Рішення з проєктами `Lab9.Core` та `Lab9.Tests`
+- Сервер WireMock запускається/зупиняється для кожного класу тестів за допомогою `IAsyncLifetime`
 
-## References
+## Посилання
 
 - [WireMock.Net Wiki](https://github.com/WireMock-Net/WireMock.Net/wiki)
 - [WireMock.Net — Request Matching](https://github.com/WireMock-Net/WireMock.Net/wiki/Request-Matching)

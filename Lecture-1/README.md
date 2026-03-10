@@ -1,330 +1,330 @@
-# Lecture 1: Introduction to Software Testing
+# Лекція 1: Вступ до тестування програмного забезпечення
 
-## Learning Objectives
+## Навчальні цілі
 
-By the end of this lecture, students will be able to:
+Після завершення цієї лекції студенти зможуть:
 
-- Define software testing and explain its role in software development
-- Distinguish between errors, defects, and failures
-- Explain the fundamental principles of testing
-- Describe the psychology of testing and its impact on team dynamics
-- Understand the software testing lifecycle
-- Write and run a basic xUnit v3 test in C#
+- Визначити тестування програмного забезпечення та пояснити його роль у розробці ПЗ
+- Розрізняти помилки, дефекти та збої
+- Пояснити фундаментальні принципи тестування
+- Описати психологію тестування та її вплив на динаміку команди
+- Розуміти життєвий цикл тестування програмного забезпечення
+- Написати та запустити базовий тест xUnit v3 на C#
 
 ---
 
-## 1. Why Software Testing Matters
+## 1. Чому тестування програмного забезпечення має значення
 
-### 1.1 The Cost of Software Failures
+### 1.1 Вартість збоїв програмного забезпечення
 
-Software defects have real-world consequences. Here are some well-known examples:
+Дефекти програмного забезпечення мають реальні наслідки. Ось кілька відомих прикладів:
 
-| Incident | Year | Impact |
+| Інцидент | Рік | Наслідки |
 |---|---|---|
-| Ariane 5 rocket explosion | 1996 | $370 million loss due to integer overflow |
-| Therac-25 radiation machine | 1985-87 | 6 patients received massive overdoses; 3 deaths |
-| Knight Capital trading glitch | 2012 | $440 million lost in 45 minutes |
-| Crowdstrike update | 2024 | ~8.5 million Windows machines crashed worldwide |
-| Toyota unintended acceleration | 2009-11 | 89 deaths attributed to software issues |
+| Вибух ракети Ariane 5 | 1996 | Збитки $370 млн через переповнення цілого числа |
+| Радіаційний апарат Therac-25 | 1985-87 | 6 пацієнтів отримали масивні передозування; 3 смерті |
+| Збій трейдингу Knight Capital | 2012 | $440 млн втрачено за 45 хвилин |
+| Оновлення Crowdstrike | 2024 | ~8,5 млн машин Windows зазнали збою по всьому світу |
+| Ненавмисне прискорення Toyota | 2009-11 | 89 смертей пов'язано з проблемами ПЗ |
 
-> **Discussion (5 min):** Can you think of a software bug that affected you personally? What was the impact?
+> **Дискусія (5 хв):** Чи можете ви згадати програмну помилку, яка вплинула на вас особисто? Які були наслідки?
 
-### 1.2 The Cost of Defects Over Time
+### 1.2 Вартість дефектів з часом
 
-The cost of finding and fixing a defect increases dramatically the later it is discovered:
+Вартість виявлення та виправлення дефекту різко зростає, чим пізніше він виявлений:
 
 ```
-Cost multiplier (relative to requirements phase):
+Множник вартості (відносно фази вимог):
 
-Requirements:   █  (1x)
-Design:         ███  (3-6x)
-Coding:         ██████  (10x)
-Testing:        ████████████  (15-40x)
-Production:     ████████████████████████████████  (30-100x)
+Вимоги:         █  (1x)
+Проєктування:   ███  (3-6x)
+Кодування:      ██████  (10x)
+Тестування:     ████████████  (15-40x)
+Продакшн:       ████████████████████████████████  (30-100x)
 ```
 
-This is known as the **Cost of Quality** principle — investing in early testing and prevention is far cheaper than fixing defects after release.
+Це відомо як принцип **Вартості якості** — інвестиції в раннє тестування та запобігання значно дешевші, ніж виправлення дефектів після релізу.
 
-### 1.3 Testing vs. Not Testing
+### 1.3 Тестування vs. Відсутність тестування
 
-| Without Testing | With Testing |
+| Без тестування | З тестуванням |
 |---|---|
-| Unpredictable release quality | Measurable quality metrics |
-| Customer-discovered bugs | Bugs caught before release |
-| Expensive hotfixes | Planned defect resolution |
-| Loss of customer trust | Confidence in releases |
-| Uncontrolled technical debt | Managed code health |
+| Непередбачувана якість релізів | Вимірювані метрики якості |
+| Помилки, знайдені клієнтами | Помилки виявлені до релізу |
+| Дорогі термінові виправлення | Плановане усунення дефектів |
+| Втрата довіри клієнтів | Впевненість у релізах |
+| Неконтрольований технічний борг | Керований стан коду |
 
 ---
 
-## 2. What is Software Testing?
+## 2. Що таке тестування програмного забезпечення?
 
-### 2.1 Definitions
+### 2.1 Визначення
 
-**Software Testing** (ISTQB definition):
-> The process consisting of all lifecycle activities, both static and dynamic, concerned with planning, preparation, and evaluation of a software product and related work products to determine that they satisfy specified requirements, to demonstrate that they are fit for purpose, and to detect defects.
+**Тестування програмного забезпечення** (визначення ISTQB):
+> Процес, що складається з усіх дій життєвого циклу, як статичних, так і динамічних, пов'язаних з плануванням, підготовкою та оцінюванням програмного продукту та пов'язаних робочих продуктів, щоб визначити, чи відповідають вони встановленим вимогам, продемонструвати, що вони придатні для використання, та виявити дефекти.
 
-In simpler terms, testing is a **systematic activity** to:
-1. **Verify** — does the software meet its specification? ("Are we building the product right?")
-2. **Validate** — does the software meet the user's actual needs? ("Are we building the right product?")
+Простіше кажучи, тестування — це **систематична діяльність** для:
+1. **Верифікації** — чи відповідає ПЗ специфікації? ("Чи правильно ми створюємо продукт?")
+2. **Валідації** — чи задовольняє ПЗ реальні потреби користувача? ("Чи створюємо ми правильний продукт?")
 
-### 2.2 Testing vs. Debugging
+### 2.2 Тестування vs. Налагодження
 
-These are often confused but are distinct activities:
+Їх часто плутають, але це різні діяльності:
 
-| Testing | Debugging |
+| Тестування | Налагодження |
 |---|---|
-| Finds failures (symptoms) | Finds and fixes the root cause (defect) |
-| Performed by testers (and developers) | Performed by developers |
-| Systematic, planned activity | Reactive, investigative activity |
-| Can be automated | Mostly manual, analytical process |
+| Знаходить збої (симптоми) | Знаходить та виправляє першопричину (дефект) |
+| Виконується тестувальниками (та розробниками) | Виконується розробниками |
+| Систематична, планова діяльність | Реактивна, дослідницька діяльність |
+| Може бути автоматизованим | Переважно ручний, аналітичний процес |
 
-**Flow:** Testing reveals a *failure* → Debugging locates the *defect* → Developer applies a *fix* → Testing *confirms* the fix.
+**Потік:** Тестування виявляє *збій* → Налагодження знаходить *дефект* → Розробник застосовує *виправлення* → Тестування *підтверджує* виправлення.
 
-### 2.3 Error, Defect, Failure
+### 2.3 Помилка, дефект, збій
 
-Understanding the distinction between these three terms is fundamental:
+Розуміння відмінності між цими трьома термінами є фундаментальним:
 
 ```
-Human makes      Defect exists        User encounters
-a mistake         in code              a problem
+Людина робить       Дефект існує         Користувач стикається
+помилку              в коді               з проблемою
     │                 │                     │
     ▼                 ▼                     ▼
-  ERROR ──────►    DEFECT ──────►      FAILURE
- (Mistake)        (Bug/Fault)        (Incorrect behavior)
+  ПОМИЛКА ──────►    ДЕФЕКТ ──────►      ЗБІЙ
+ (Mistake)        (Bug/Fault)        (Некоректна поведінка)
 
- "I wrote >       "if (x > 0)"        "App crashes for
-  instead          should be           negative input"
-  of >="          "if (x >= 0)"
+ "Я написав >       "if (x > 0)"        "Додаток падає для
+  замість            має бути           від'ємного вводу"
+  >="               "if (x >= 0)"
 ```
 
-- **Error (Mistake):** A human action that produces an incorrect result (e.g., misunderstanding a requirement)
-- **Defect (Bug/Fault):** A flaw in the code or documentation that may cause a failure
-- **Failure:** The observable incorrect behavior when a defect is executed
+- **Помилка (Mistake):** Дія людини, що призводить до некоректного результату (напр., неправильне розуміння вимоги)
+- **Дефект (Bug/Fault):** Недолік у коді або документації, який може призвести до збою
+- **Збій:** Спостережувана некоректна поведінка при виконанні дефекту
 
-> **Note:** Not every defect leads to a failure. A defect in code that is never executed will never cause a failure.
+> **Примітка:** Не кожен дефект призводить до збою. Дефект у коді, який ніколи не виконується, ніколи не спричинить збій.
 
 ---
 
-## 3. Seven Principles of Software Testing
+## 3. Сім принципів тестування програмного забезпечення
 
-These principles (from ISTQB syllabus) guide testing practice:
+Ці принципи (із силабусу ISTQB) керують практикою тестування:
 
-### Principle 1: Testing Shows the Presence of Defects, Not Their Absence
+### Принцип 1: Тестування показує наявність дефектів, а не їх відсутність
 
-Testing can show that defects are present, but cannot prove that there are no defects. Testing reduces the probability of undiscovered defects, but even if no defects are found, it does not prove correctness.
+Тестування може показати, що дефекти присутні, але не може довести, що дефектів немає. Тестування зменшує ймовірність невиявлених дефектів, але навіть якщо дефекти не знайдені, це не доводить коректність.
 
-> *"Program testing can be used to show the presence of bugs, but never to show their absence."*
-> — Edsger W. Dijkstra
+> *"Тестування програм може бути використане для демонстрації наявності помилок, але ніколи — для демонстрації їх відсутності."*
+> — Едсгер В. Дейкстра
 
-### Principle 2: Exhaustive Testing is Impossible
+### Принцип 2: Вичерпне тестування неможливе
 
-Testing everything (all combinations of inputs, preconditions, and paths) is not feasible except for trivial cases.
+Протестувати все (усі комбінації вхідних даних, передумов і шляхів) неможливо, окрім тривіальних випадків.
 
-**Example:** A simple login form with:
-- Username: up to 50 characters (printable ASCII = ~95 options per character)
-- Password: up to 30 characters
+**Приклад:** Проста форма входу з:
+- Ім'я користувача: до 50 символів (друковані ASCII = ~95 варіантів на символ)
+- Пароль: до 30 символів
 
-Total combinations: 95^50 × 95^30 ≈ 10^158 — more than the atoms in the observable universe (~10^80).
+Загальна кількість комбінацій: 95^50 × 95^30 ≈ 10^158 — більше, ніж атомів у спостережуваному Всесвіті (~10^80).
 
-Instead of exhaustive testing, we use **risk analysis** and **test design techniques** to prioritize.
+Замість вичерпного тестування ми використовуємо **аналіз ризиків** та **техніки проєктування тестів** для пріоритезації.
 
-### Principle 3: Early Testing Saves Time and Money
+### Принцип 3: Раннє тестування заощаджує час і гроші
 
-Testing activities should start as early as possible in the software development lifecycle. Reviewing requirements and designs is also a form of testing (static testing).
+Тестові активності повинні починатися якомога раніше в життєвому циклі розробки ПЗ. Перегляд вимог і проєктних рішень також є формою тестування (статичне тестування).
 
-### Principle 4: Defects Cluster Together
+### Принцип 4: Дефекти групуються разом
 
-A small number of modules usually contain most of the defects. This is similar to the Pareto principle (80/20 rule): roughly 80% of defects are found in 20% of modules.
+Невелика кількість модулів зазвичай містить більшість дефектів. Це схоже на принцип Парето (правило 80/20): приблизно 80% дефектів знаходять у 20% модулів.
 
-This insight helps focus testing effort on the most defect-prone areas.
+Це розуміння допомагає зосередити зусилля тестування на найбільш схильних до дефектів областях.
 
-### Principle 5: The Pesticide Paradox
+### Принцип 5: Парадокс пестициду
 
-If the same tests are repeated over and over, eventually they will no longer find new defects — like pesticide that insects become immune to.
+Якщо ті самі тести повторюються знову і знову, зрештою вони більше не будуть знаходити нові дефекти — як пестицид, до якого комахи стають імунними.
 
-**Countermeasure:** Regularly review and revise test cases. Add new tests for new functionality and changed code.
+**Контрзахід:** Регулярно переглядайте та оновлюйте тестові випадки. Додавайте нові тести для нової функціональності та зміненого коду.
 
-### Principle 6: Testing is Context-Dependent
+### Принцип 6: Тестування залежить від контексту
 
-Testing is done differently in different contexts. For example:
-- Safety-critical software (medical devices, aviation) requires rigorous, formal testing
-- An internal tool may need less formal testing
-- A mobile game has different quality priorities than a banking application
+Тестування виконується по-різному в різних контекстах. Наприклад:
+- Критичне для безпеки ПЗ (медичні пристрої, авіація) вимагає ретельного, формального тестування
+- Внутрішній інструмент може потребувати менш формального тестування
+- Мобільна гра має інші пріоритети якості, ніж банківський додаток
 
-### Principle 7: Absence-of-Errors Fallacy
+### Принцип 7: Хибність відсутності помилок
 
-Finding and fixing many defects does not help if the system built is unusable or does not fulfill the users' needs. A perfectly bug-free product that nobody wants is still a failure.
+Виявлення та виправлення багатьох дефектів не допоможе, якщо побудована система непридатна для використання або не відповідає потребам користувачів. Ідеально безпомилковий продукт, який нікому не потрібен, все одно є невдачею.
 
-> **Discussion (10 min):** For each principle, think of a practical example from your experience. Have you seen any of these principles violated?
+> **Дискусія (10 хв):** Для кожного принципу придумайте практичний приклад зі свого досвіду. Чи бачили ви порушення якогось із цих принципів?
 
 ---
 
-## 4. Software Development Lifecycle and Testing
+## 4. Життєвий цикл розробки програмного забезпечення та тестування
 
-### 4.1 Testing in Different SDLC Models
+### 4.1 Тестування в різних моделях ЖЦРПЗ
 
-Testing is not a phase — it is an activity that accompanies every development phase.
+Тестування — це не фаза, а діяльність, що супроводжує кожну фазу розробки.
 
-#### Waterfall Model
+#### Каскадна модель
 
 ```
-Requirements ──► Design ──► Implementation ──► Testing ──► Deployment ──► Maintenance
+Вимоги ──► Проєктування ──► Реалізація ──► Тестування ──► Впровадження ──► Супровід
                                                   │
-                                          (testing happens late,
-                                           defects found late)
+                                          (тестування відбувається пізно,
+                                           дефекти виявляються пізно)
 ```
 
-Testing comes at the end, which means defects are found late and are expensive to fix.
+Тестування відбувається наприкінці, що означає, що дефекти виявляються пізно і їх дорого виправляти.
 
-#### V-Model
+#### V-модель
 
-The V-Model pairs each development phase with a corresponding testing phase:
+V-модель поєднує кожну фазу розробки з відповідною фазою тестування:
 
 ```
-Requirements ─────────────────────────── Acceptance Testing
+Вимоги ───────────────────────────────── Приймальне тестування
     │                                           │
-    Design ──────────────────────── System Testing
+    Проєктування ─────────────────── Системне тестування
         │                                   │
-        Detailed Design ─────── Integration Testing
+        Детальне проєктування ── Інтеграційне тестування
             │                           │
-            Implementation ──── Unit Testing
+            Реалізація ──────── Модульне тестування
 ```
 
-Each level of testing validates the corresponding development phase. This model makes the relationship between development and testing explicit.
+Кожен рівень тестування валідує відповідну фазу розробки. Ця модель робить зв'язок між розробкою та тестуванням явним.
 
-#### Agile / Iterative Models
+#### Agile / Ітеративні моделі
 
 ```
 ┌─────────────────────────────────────────┐
-│  Sprint / Iteration                     │
+│  Спринт / Ітерація                      │
 │                                         │
-│  Plan → Develop → Test → Review → Demo  │
+│  Планування → Розробка → Тест → Огляд → Демо  │
 │    ▲                              │     │
 │    └──────────────────────────────┘     │
 └─────────────────────────────────────────┘
-        Repeat every 1-4 weeks
+        Повторення кожні 1-4 тижні
 ```
 
-In Agile, testing is **continuous** and happens throughout every iteration:
-- Developers write unit tests alongside code (TDD)
-- Testers collaborate with developers daily
-- Automated regression tests run on every commit
-- Exploratory testing for each new feature
+В Agile тестування є **безперервним** і відбувається протягом кожної ітерації:
+- Розробники пишуть модульні тести паралельно з кодом (TDD)
+- Тестувальники співпрацюють з розробниками щоденно
+- Автоматизовані регресійні тести запускаються при кожному коміті
+- Дослідницьке тестування для кожної нової функції
 
-### 4.2 Testing Activities in the SDLC
+### 4.2 Тестові активності в ЖЦРПЗ
 
-Regardless of the model, testing involves these key activities:
+Незалежно від моделі, тестування включає такі ключові діяльності:
 
-1. **Test Planning** — Define scope, approach, resources, schedule
-2. **Test Analysis** — Analyze the test basis (requirements, design) to identify test conditions
-3. **Test Design** — Create test cases and test data from test conditions
-4. **Test Implementation** — Prepare test environment, create test scripts
-5. **Test Execution** — Run tests, compare results, log defects
-6. **Test Completion** — Archive test artifacts, analyze lessons learned
+1. **Планування тестування** — Визначення обсягу, підходу, ресурсів, графіку
+2. **Аналіз тестування** — Аналіз тестової бази (вимог, проєктування) для виявлення умов тестування
+3. **Проєктування тестів** — Створення тестових випадків та тестових даних з умов тестування
+4. **Реалізація тестів** — Підготовка тестового середовища, створення тестових скриптів
+5. **Виконання тестів** — Запуск тестів, порівняння результатів, реєстрація дефектів
+6. **Завершення тестування** — Архівація тестових артефактів, аналіз отриманих уроків
 
 ---
 
-## 5. Roles in Software Testing
+## 5. Ролі в тестуванні програмного забезпечення
 
-### 5.1 Tester vs. Developer
+### 5.1 Тестувальник vs. Розробник
 
-| Aspect | Developer | Tester |
+| Аспект | Розробник | Тестувальник |
 |---|---|---|
-| Primary goal | Build the software | Break the software (find defects) |
-| Perspective | Constructive ("How do I make it work?") | Destructive ("How can I make it fail?") |
-| Bias | Confirmation bias toward their code | Seeks disconfirmation |
-| Testing scope | Unit and component tests | All levels of testing |
+| Основна мета | Створити ПЗ | Зламати ПЗ (знайти дефекти) |
+| Перспектива | Конструктивна ("Як змусити це працювати?") | Деструктивна ("Як змусити це зламатися?") |
+| Упередженість | Схильність до підтвердження щодо свого коду | Шукає спростування |
+| Обсяг тестування | Модульні та компонентні тести | Всі рівні тестування |
 
-### 5.2 The Whole-Team Approach
+### 5.2 Підхід всієї команди
 
-In modern software development, quality is everyone's responsibility:
+У сучасній розробці ПЗ якість — це відповідальність кожного:
 
-- **Developers** write unit tests, perform code reviews
-- **Testers/QA Engineers** design test strategies, create test plans, perform exploratory testing
-- **Product Owners** define acceptance criteria
-- **DevOps** maintains CI/CD pipelines and test environments
-- **The whole team** participates in quality discussions
+- **Розробники** пишуть модульні тести, проводять огляд коду
+- **Тестувальники/QA-інженери** проєктують тестові стратегії, створюють тестові плани, проводять дослідницьке тестування
+- **Власники продукту** визначають критерії приймання
+- **DevOps** підтримують конвеєри CI/CD та тестові середовища
+- **Вся команда** бере участь в обговоренні якості
 
 ---
 
-## 6. Psychology of Testing
+## 6. Психологія тестування
 
-### 6.1 Cognitive Biases in Testing
+### 6.1 Когнітивні упередження в тестуванні
 
-Testing is a human activity and subject to cognitive biases:
+Тестування — це людська діяльність, яка підлягає когнітивним упередженням:
 
-- **Confirmation bias:** Tendency to look for evidence that confirms our beliefs. Developers may unconsciously test only the "happy path"
-- **Anchoring:** Being overly influenced by the first piece of information received
-- **Automation bias:** Over-trusting automated test results without questioning them
+- **Упередження підтвердження:** Тенденція шукати докази, що підтверджують наші переконання. Розробники можуть несвідомо тестувати лише "щасливий шлях"
+- **Ефект якоря:** Надмірний вплив першої отриманої інформації
+- **Упередження автоматизації:** Надмірна довіра до результатів автоматизованих тестів без їх оскарження
 
-### 6.2 Independence of Testing
+### 6.2 Незалежність тестування
 
-Different levels of independence in testing:
+Різні рівні незалежності тестування:
 
 ```
-Low independence                              High independence
+Низька незалежність                      Висока незалежність
       │                                              │
       ▼                                              ▼
- Developer     Developer     Tester from      Tester from     External
- tests own     tests         the same         a different     test
- code          colleague's   team             organization    organization
-               code
+ Розробник    Розробник     Тестувальник   Тестувальник  Зовнішня
+ тестує       тестує        з тієї ж      з іншої       тестова
+ власний      код           команди       організації   організація
+ код          колеги
 ```
 
-Greater independence helps find more defects (fewer blind spots), but may slow communication. A balance is needed.
+Більша незалежність допомагає знаходити більше дефектів (менше сліпих зон), але може уповільнити комунікацію. Потрібен баланс.
 
-### 6.3 Communication and Feedback
+### 6.3 Комунікація та зворотний зв'язок
 
-How defects are communicated matters:
+Те, як повідомляються дефекти, має значення:
 
-**Bad:** *"Your code is broken. The login doesn't work."*
+**Погано:** *"Ваш код зламаний. Вхід не працює."*
 
-**Good:** *"I found an issue in the login module. When entering a valid email with a '+' character (e.g., user+tag@example.com), the validation rejects it. Steps to reproduce: ..."*
+**Добре:** *"Я знайшов проблему в модулі входу. При введенні валідного email з символом '+' (напр., user+tag@example.com), валідація його відхиляє. Кроки для відтворення: ..."*
 
-Effective defect reports are:
-- **Objective** — focus on facts, not blame
-- **Specific** — include steps to reproduce
-- **Constructive** — suggest impact and priority
+Ефективні звіти про дефекти є:
+- **Об'єктивними** — зосередженими на фактах, а не на звинуваченнях
+- **Конкретними** — включають кроки для відтворення
+- **Конструктивними** — пропонують вплив та пріоритет
 
-> **Discussion (5 min):** Why is it difficult to give and receive feedback about defects? How can teams create a culture where finding bugs is celebrated?
+> **Дискусія (5 хв):** Чому складно давати та отримувати зворотний зв'язок про дефекти? Як команди можуть створити культуру, де знаходження помилок вітається?
 
 ---
 
-## 7. Introduction to Test Automation with xUnit v3
+## 7. Вступ до автоматизації тестів з xUnit v3
 
-### 7.1 Why Automate Tests?
+### 7.1 Навіщо автоматизувати тести?
 
-| Manual Testing | Automated Testing |
+| Ручне тестування | Автоматизоване тестування |
 |---|---|
-| Slow, repetitive | Fast, repeatable |
-| Prone to human error | Consistent execution |
-| Hard to scale | Easy to scale |
-| Good for exploratory testing | Good for regression testing |
+| Повільне, повторюване | Швидке, повторюване |
+| Схильне до людських помилок | Стабільне виконання |
+| Важко масштабувати | Легко масштабувати |
+| Добре для дослідницького тестування | Добре для регресійного тестування |
 
-Automated tests serve as **living documentation** of expected behavior and provide a **safety net** for refactoring.
+Автоматизовані тести слугують **живою документацією** очікуваної поведінки та забезпечують **страхувальну сітку** для рефакторингу.
 
-### 7.2 Your First xUnit v3 Test
+### 7.2 Ваш перший тест xUnit v3
 
-#### Project Setup
+#### Налаштування проєкту
 
 ```bash
-# Create a class library for the code under test
+# Створити бібліотеку класів для коду, що тестується
 dotnet new classlib -n Calculator
 cd Calculator
 
-# Create a test project
+# Створити тестовий проєкт
 cd ..
 dotnet new classlib -n Calculator.Tests
 cd Calculator.Tests
 
-# Add xUnit v3 and reference the project under test
+# Додати xUnit v3 та посилання на проєкт, що тестується
 dotnet add package xunit.v3
 dotnet add package Shouldly
 dotnet add reference ../Calculator/Calculator.csproj
 ```
 
-#### Code Under Test
+#### Код, що тестується
 
 ```csharp
 // Calculator/MathService.cs
@@ -348,7 +348,7 @@ public class MathService
 }
 ```
 
-#### Test Class
+#### Тестовий клас
 
 ```csharp
 // Calculator.Tests/MathServiceTests.cs
@@ -360,7 +360,7 @@ public class MathServiceTests
 {
     private readonly MathService _sut = new(); // SUT = System Under Test
 
-    // --- Arrange-Act-Assert Pattern ---
+    // --- Патерн Arrange-Act-Assert ---
 
     [Fact]
     public void Add_TwoPositiveNumbers_ReturnsCorrectSum()
@@ -418,114 +418,114 @@ public class MathServiceTests
 }
 ```
 
-### 7.3 Understanding the Test Structure
+### 7.3 Розуміння структури тесту
 
-#### The AAA Pattern
+#### Патерн AAA
 
-Every well-structured test follows the **Arrange-Act-Assert** pattern:
+Кожен добре структурований тест дотримується патерну **Arrange-Act-Assert**:
 
 ```
 ┌──────────────────────────────────┐
 │  ARRANGE                         │
-│  Set up the test preconditions   │
-│  - Create objects                │
-│  - Prepare test data             │
-│  - Configure dependencies        │
+│  Налаштування передумов тесту    │
+│  - Створення об'єктів            │
+│  - Підготовка тестових даних     │
+│  - Конфігурація залежностей      │
 ├──────────────────────────────────┤
 │  ACT                             │
-│  Execute the behavior under test │
-│  - Call the method               │
-│  - Trigger the action            │
+│  Виконання поведінки, що тестується │
+│  - Виклик методу                 │
+│  - Ініціювання дії               │
 ├──────────────────────────────────┤
 │  ASSERT                          │
-│  Verify the expected outcome     │
-│  - Check return values           │
-│  - Verify state changes          │
-│  - Confirm exceptions thrown     │
+│  Перевірка очікуваного результату │
+│  - Перевірка значень, що повертаються │
+│  - Перевірка змін стану          │
+│  - Підтвердження виникнення винятків │
 └──────────────────────────────────┘
 ```
 
-#### xUnit v3 Key Concepts
+#### Ключові концепції xUnit v3
 
-| Concept | Description | Example |
+| Концепція | Опис | Приклад |
 |---|---|---|
-| `[Fact]` | A test method that takes no parameters | Single test case |
-| `[Theory]` | A parameterized test method | Multiple test cases with different data |
-| `[InlineData]` | Provides inline parameters to a `[Theory]` | `[InlineData(2, true)]` |
-| `ShouldBe()` | Shouldly assertion for equality | `result.ShouldBe(42)` |
-| `Should.Throw<T>()` | Shouldly assertion for exceptions | `Should.Throw<ArgumentException>(...)` |
+| `[Fact]` | Тестовий метод без параметрів | Один тестовий випадок |
+| `[Theory]` | Параметризований тестовий метод | Кілька тестових випадків з різними даними |
+| `[InlineData]` | Надає вбудовані параметри для `[Theory]` | `[InlineData(2, true)]` |
+| `ShouldBe()` | Shouldly-перевірка рівності | `result.ShouldBe(42)` |
+| `Should.Throw<T>()` | Shouldly-перевірка винятків | `Should.Throw<ArgumentException>(...)` |
 
-#### Test Naming Conventions
+#### Конвенції іменування тестів
 
-Test names should describe the **behavior**, not the implementation:
+Назви тестів повинні описувати **поведінку**, а не реалізацію:
 
 ```
-MethodName_Scenario_ExpectedBehavior
+ MethodName_Scenario_ExpectedBehavior
 ```
 
-| Good Name | Bad Name |
+| Добра назва | Погана назва |
 |---|---|
 | `Add_TwoPositiveNumbers_ReturnsCorrectSum` | `TestAdd` |
 | `Divide_ByZero_ThrowsException` | `DivideTest1` |
 | `IsEven_NegativeEvenNumber_ReturnsTrue` | `Test3` |
 
-### 7.4 Running Tests
+### 7.4 Запуск тестів
 
 ```bash
-# Run all tests
+# Запустити всі тести
 dotnet test
 
-# Run with detailed output
+# Запустити з детальним виводом
 dotnet test --verbosity normal
 
-# Run specific test class
+# Запустити конкретний тестовий клас
 dotnet test --filter "FullyQualifiedName~MathServiceTests"
 
-# Run a specific test
+# Запустити конкретний тест
 dotnet test --filter "Add_TwoPositiveNumbers_ReturnsCorrectSum"
 ```
 
-Example output:
+Приклад виводу:
 ```
 Passed!  - Failed:     0, Passed:     5, Skipped:     0, Total:     5
 ```
 
 ---
 
-## 8. Static Testing
+## 8. Статичне тестування
 
-### 8.1 What is Static Testing?
+### 8.1 Що таке статичне тестування?
 
-Static testing examines code and documents **without executing** them. It includes:
+Статичне тестування перевіряє код та документи **без їх виконання**. Воно включає:
 
-- **Reviews** — peer reviews, walkthroughs, inspections of code, requirements, design
-- **Static Analysis** — automated tools that analyze source code for potential defects
+- **Огляди** — рецензування колегами, покрокові перегляди, інспекції коду, вимог, проєктування
+- **Статичний аналіз** — автоматизовані інструменти, що аналізують вихідний код на потенційні дефекти
 
-### 8.2 Types of Reviews
+### 8.2 Типи оглядів
 
-| Type | Formality | Led By | Goal |
+| Тип | Формальність | Хто веде | Мета |
 |---|---|---|---|
-| Informal review | Low | Author/peer | Quick feedback |
-| Walkthrough | Low-Medium | Author | Education, understanding |
-| Technical review | Medium | Moderator | Find defects, share knowledge |
-| Inspection | High | Trained moderator | Find defects systematically |
+| Неформальний огляд | Низька | Автор/колега | Швидкий зворотний зв'язок |
+| Покроковий перегляд | Низька-Середня | Автор | Навчання, розуміння |
+| Технічний огляд | Середня | Модератор | Знаходження дефектів, обмін знаннями |
+| Інспекція | Висока | Навчений модератор | Систематичне знаходження дефектів |
 
-### 8.3 Static Analysis Tools
+### 8.3 Інструменти статичного аналізу
 
-Static analysis tools can detect:
-- Code style violations
-- Potential null reference exceptions
-- Unused variables and dead code
-- Security vulnerabilities
-- Code complexity metrics
+Інструменти статичного аналізу можуть виявити:
+- Порушення стилю коду
+- Потенційні винятки null reference
+- Невикористані змінні та мертвий код
+- Вразливості безпеки
+- Метрики складності коду
 
-In C#, common tools include:
-- **Roslyn Analyzers** (built into .NET SDK)
+У C# поширені інструменти включають:
+- **Roslyn Analyzers** (вбудовані в .NET SDK)
 - **SonarQube / SonarCloud**
 - **ReSharper / Rider inspections**
 
 ```bash
-# Enable .NET analyzers in your project file
+# Увімкнення .NET аналізаторів у файлі проєкту
 # <PropertyGroup>
 #   <EnableNETAnalyzers>true</EnableNETAnalyzers>
 #   <AnalysisLevel>latest</AnalysisLevel>
@@ -534,60 +534,60 @@ In C#, common tools include:
 
 ---
 
-## 9. Quality Characteristics
+## 9. Характеристики якості
 
-### 9.1 ISO 25010 Quality Model
+### 9.1 Модель якості ISO 25010
 
-Software quality is multi-dimensional. The ISO 25010 standard defines eight quality characteristics:
+Якість програмного забезпечення є багатовимірною. Стандарт ISO 25010 визначає вісім характеристик якості:
 
 ```
-                    Software Quality
+                    Якість програмного забезпечення
                          │
     ┌────────┬───────┬───┴───┬────────┬──────────┬───────────┬──────────┐
     │        │       │       │        │          │           │          │
-Functional  Performance  Compat-  Usability  Reliability  Security  Maintain-  Port-
-Suitability Efficiency   ibility                                     ability    ability
+Функціональна Продуктивність Суміс-  Зручність  Надійність  Безпека  Супровод-  Перено-
+придатність   Ефективність  ність   використання                     ність      симість
 ```
 
-| Characteristic | Description | Example Test |
+| Характеристика | Опис | Приклад тесту |
 |---|---|---|
-| **Functional suitability** | Does it do what it should? | Does login accept valid credentials? |
-| **Performance efficiency** | How fast/resource-efficient? | Does the page load in < 2 seconds? |
-| **Compatibility** | Works with other systems? | Does it work in Chrome, Firefox, Safari? |
-| **Usability** | Easy to use? | Can a new user complete checkout in < 3 min? |
-| **Reliability** | Works consistently? | Does it handle 10,000 concurrent users? |
-| **Security** | Protected from threats? | Is SQL injection prevented? |
-| **Maintainability** | Easy to modify? | Can a new developer understand the code? |
-| **Portability** | Runs on different platforms? | Does it work on Windows and Linux? |
+| **Функціональна придатність** | Чи робить те, що повинно? | Чи приймає вхід валідні облікові дані? |
+| **Продуктивність** | Наскільки швидке/ресурсоефективне? | Чи завантажується сторінка за < 2 секунди? |
+| **Сумісність** | Працює з іншими системами? | Чи працює в Chrome, Firefox, Safari? |
+| **Зручність використання** | Легке у використанні? | Чи може новий користувач завершити замовлення за < 3 хв? |
+| **Надійність** | Працює стабільно? | Чи витримує 10 000 одночасних користувачів? |
+| **Безпека** | Захищене від загроз? | Чи запобігає SQL-ін'єкціям? |
+| **Супроводність** | Легке у модифікації? | Чи може новий розробник зрозуміти код? |
+| **Переносимість** | Працює на різних платформах? | Чи працює на Windows і Linux? |
 
 ---
 
-## 10. Summary
+## 10. Підсумок
 
-### Key Takeaways
+### Ключові висновки
 
-1. Testing is essential because software defects have real costs — financial, reputational, and sometimes human
-2. Testing shows the presence of defects, not their absence
-3. Finding defects early saves time and money
-4. Testing involves systematic activities: planning, analysis, design, execution, and completion
-5. Both static and dynamic testing contribute to software quality
-6. Automated tests provide a safety net and living documentation
-7. The AAA pattern (Arrange-Act-Assert) is the standard structure for unit tests
+1. Тестування є необхідним, оскільки дефекти ПЗ мають реальну вартість — фінансову, репутаційну, а іноді й людську
+2. Тестування показує наявність дефектів, а не їх відсутність
+3. Раннє виявлення дефектів заощаджує час і гроші
+4. Тестування включає систематичні діяльності: планування, аналіз, проєктування, виконання та завершення
+5. Як статичне, так і динамічне тестування сприяють якості ПЗ
+6. Автоматизовані тести забезпечують страхувальну сітку та живу документацію
+7. Патерн AAA (Arrange-Act-Assert) є стандартною структурою для модульних тестів
 
-### Preview of Next Lecture
+### Анонс наступної лекції
 
-In **Lecture 2: Unit Testing and Mocking**, we will:
-- Deep dive into xUnit v3 with `[Fact]` and `[Theory]`
-- Master Shouldly assertions for readable test output
-- Learn test doubles: stubs, mocks, fakes, and spies
-- Use NSubstitute to isolate dependencies in unit tests
-- Apply best practices for test naming, organization, and edge cases
+У **Лекції 2: Модульне тестування та мокування** ми:
+- Детально розглянемо xUnit v3 з `[Fact]` та `[Theory]`
+- Освоїмо Shouldly-перевірки для читабельного виводу тестів
+- Вивчимо тестові дублери: стаби, моки, фейки та шпигуни
+- Використаємо NSubstitute для ізоляції залежностей у модульних тестах
+- Застосуємо найкращі практики іменування, організації тестів та граничних випадків
 
 ---
 
-## References and Further Reading
+## Посилання та додаткова література
 
-- **ISTQB Foundation Level Syllabus** (v4.0, 2023) — Chapters 1-2
+- **ISTQB Foundation Level Syllabus** (v4.0, 2023) — Розділи 1-2
   - https://www.istqb.org/certifications/certified-tester-foundation-level
 - **"Lessons Learned in Software Testing"** — C. Kaner, J. Bach, B. Pettichord (Wiley, 2001)
 - **"The Art of Software Testing"** — G. Myers, C. Sandler, T. Badgett (Wiley, 3rd edition, 2011)

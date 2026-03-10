@@ -1,65 +1,65 @@
-# Lab 12 — CI/CD Pipelines for Testing
+# Лабораторна 12 — CI/CD пайплайни для тестування
 
-## Objective
+## Мета
 
-Set up automated testing pipelines using GitHub Actions. Configure test execution, code coverage reporting, and quality gates that run on every push and pull request.
+Налаштувати автоматизовані пайплайни тестування за допомогою GitHub Actions. Сконфігурувати виконання тестів, звітність про покриття коду та якісні шлюзи, що запускаються при кожному push та pull request.
 
-**Duration:** 60 minutes
+**Тривалість:** 60 хвилин
 
-## Prerequisites
+## Передумови
 
-Before starting this lab, make sure you have:
+Перед початком цієї лабораторної переконайтеся, що у вас є:
 
-- A GitHub account with a repository you can push to
-- .NET 10 SDK (or later) installed locally
-- A working .NET solution with tests from any previous lab
-- Basic familiarity with YAML syntax
-- Understanding of Git branching (creating branches, pull requests)
-- `git` CLI installed and configured
+- Обліковий запис GitHub із репозиторієм, до якого ви можете робити push
+- Локально встановлений .NET 10 SDK (або новіший)
+- Працююче .NET-рішення з тестами з будь-якої попередньої лабораторної
+- Базове знайомство із синтаксисом YAML
+- Розуміння гілкування в Git (створення гілок, pull request-и)
+- Встановлений та налаштований `git` CLI
 
-Recommended background:
+Рекомендований досвід:
 
-- [GitHub Actions Quickstart](https://docs.github.com/en/actions/quickstart) -- read this if you have never used GitHub Actions before
-- Completed at least one lab with passing xUnit tests (e.g., Lab 3 or Lab 5)
+- [Швидкий старт з GitHub Actions](https://docs.github.com/en/actions/quickstart) -- прочитайте, якщо ви ніколи не використовували GitHub Actions
+- Виконана хоча б одна лабораторна з працюючими тестами xUnit (наприклад, Лабораторна 3 або Лабораторна 5)
 
-## Key Concepts
+## Ключові поняття
 
-### What Is CI/CD?
+### Що таке CI/CD?
 
-**Continuous Integration (CI)** is the practice of automatically building, testing, and validating code every time a developer pushes changes. **Continuous Delivery/Deployment (CD)** extends CI by automatically deploying validated code to staging or production.
+**Неперервна інтеграція (CI)** — це практика автоматичної збірки, тестування та валідації коду щоразу, коли розробник робить push змін. **Неперервна доставка/розгортання (CD)** розширює CI шляхом автоматичного розгортання перевіреного коду на staging або production.
 
-In this lab, we focus on the **CI** side: running tests automatically.
+У цій лабораторній ми зосереджуємося на частині **CI**: автоматичному запуску тестів.
 
-### Why Automate Testing?
+### Навіщо автоматизувати тестування?
 
-| Without CI | With CI |
-|-----------|---------|
-| "It works on my machine" | Tests run on a clean, reproducible environment |
-| Tests are skipped before merging | Tests must pass to merge |
-| Bugs caught late (after merge) | Bugs caught early (on PR) |
-| Coverage unknown | Coverage tracked and enforced |
-| Manual effort to verify quality | Automated quality gates |
+| Без CI | З CI |
+|--------|------|
+| "У мене на машині працює" | Тести виконуються в чистому, відтворюваному середовищі |
+| Тести пропускаються перед злиттям | Тести повинні пройти для злиття |
+| Помилки виявляються пізно (після злиття) | Помилки виявляються рано (на PR) |
+| Покриття невідоме | Покриття відстежується та контролюється |
+| Ручна перевірка якості | Автоматизовані якісні шлюзи |
 
-### GitHub Actions Terminology
+### Термінологія GitHub Actions
 
-| Term | Meaning |
-|------|---------|
-| **Workflow** | A YAML file in `.github/workflows/` that defines automation |
-| **Job** | A set of steps that run on the same runner |
-| **Step** | A single command or action within a job |
-| **Runner** | A virtual machine that executes the job (`ubuntu-latest`, `windows-latest`, etc.) |
-| **Action** | A reusable unit of code (e.g., `actions/checkout@v6`) |
-| **Trigger** | An event that starts the workflow (`push`, `pull_request`, `schedule`, etc.) |
-| **Artifact** | A file produced by a workflow and uploaded for later access |
-| **Matrix** | A strategy that runs the same job with different configurations |
+| Термін | Значення |
+|--------|----------|
+| **Workflow** | YAML-файл у `.github/workflows/`, що визначає автоматизацію |
+| **Job** | Набір кроків, що виконуються на одному runner-і |
+| **Step** | Одна команда або action у межах job |
+| **Runner** | Віртуальна машина, що виконує job (`ubuntu-latest`, `windows-latest` тощо) |
+| **Action** | Багаторазовий блок коду (наприклад, `actions/checkout@v6`) |
+| **Trigger** | Подія, що запускає workflow (`push`, `pull_request`, `schedule` тощо) |
+| **Artifact** | Файл, створений workflow і завантажений для подальшого доступу |
+| **Matrix** | Стратегія запуску одного й того ж job з різними конфігураціями |
 
-### How Coverage Works
+### Як працює покриття коду
 
-**Coverlet** instruments your .NET assemblies to track which lines of code are executed during tests. After tests complete, it generates a coverage report showing:
+**Coverlet** інструментує ваші .NET-збірки для відстеження, які рядки коду виконуються під час тестів. Після завершення тестів він генерує звіт про покриття, що показує:
 
-- **Line coverage**: percentage of code lines executed
-- **Branch coverage**: percentage of conditional branches taken
-- **Method coverage**: percentage of methods called
+- **Покриття рядків**: відсоток виконаних рядків коду
+- **Покриття гілок**: відсоток пройдених умовних розгалужень
+- **Покриття методів**: відсоток викликаних методів
 
 ```
 +--------------------------------------------------+
@@ -72,25 +72,25 @@ In this lab, we focus on the **CI** side: running tests automatically.
 +--------------------------------------------------+
 ```
 
-## Tools
+## Інструменти
 
 - CI/CD: [GitHub Actions](https://docs.github.com/en/actions)
-- Coverage: [Coverlet](https://github.com/coverlet-coverage/coverlet) + [ReportGenerator](https://github.com/danielpalme/ReportGenerator)
-- Code Quality: [SonarCloud](https://sonarcloud.io/) (optional)
+- Покриття: [Coverlet](https://github.com/coverlet-coverage/coverlet) + [ReportGenerator](https://github.com/danielpalme/ReportGenerator)
+- Якість коду: [SonarCloud](https://sonarcloud.io/) (опціонально)
 
-## Setup
+## Налаштування
 
-Create a GitHub repository and push a .NET solution with tests from any previous lab.
+Створіть репозиторій на GitHub та завантажте .NET-рішення з тестами з будь-якої попередньої лабораторної.
 
-### Initial Repository Structure
+### Початкова структура репозиторію
 
-Your repository should look roughly like this before starting:
+Ваш репозиторій повинен виглядати приблизно так перед початком:
 
 ```
 my-lab-project/
 ├── .github/
 │   └── workflows/
-│       └── ci.yml          <-- you will create this
+│       └── ci.yml          <-- ви створите цей файл
 ├── src/
 │   └── MyApp/
 │       └── ...
@@ -101,31 +101,31 @@ my-lab-project/
 └── README.md
 ```
 
-### Adding Coverage Packages
+### Додавання пакетів покриття
 
-Make sure your test project includes the Coverlet collector:
+Переконайтеся, що ваш тестовий проект включає Coverlet collector:
 
 ```bash
 dotnet add tests/MyApp.Tests package coverlet.collector
 ```
 
-## Tasks
+## Завдання
 
-### Task 1 — Basic CI Pipeline
+### Завдання 1 — Базовий CI-пайплайн
 
-Create `.github/workflows/ci.yml`:
+Створіть `.github/workflows/ci.yml`:
 
-1. Trigger on `push` to `main` and on all `pull_request` events
-2. Use `ubuntu-latest` runner
-3. Steps:
-   - Checkout code
-   - Setup .NET SDK
-   - Restore dependencies
-   - Build the solution
-   - Run all tests with `dotnet test`
-4. Ensure the pipeline fails if any test fails
+1. Тригер на `push` у `main` та на всі події `pull_request`
+2. Використовуйте runner `ubuntu-latest`
+3. Кроки:
+   - Checkout коду
+   - Налаштування .NET SDK
+   - Відновлення залежностей
+   - Збірка рішення
+   - Запуск усіх тестів через `dotnet test`
+4. Переконайтеся, що пайплайн завершується невдачею, якщо будь-який тест не пройшов
 
-Example structure:
+Приклад структури:
 
 ```yaml
 name: CI
@@ -153,27 +153,27 @@ jobs:
         run: dotnet test --no-build --verbosity normal
 ```
 
-> **Hint:** The `--no-restore` and `--no-build` flags avoid redundant work. Each step builds on the previous one: restore downloads packages, build compiles the code, test runs the compiled tests. Without these flags, each step would repeat all previous work.
+> **Підказка:** Прапорці `--no-restore` та `--no-build` уникають зайвої роботи. Кожен крок базується на попередньому: restore завантажує пакети, build компілює код, test запускає скомпільовані тести. Без цих прапорців кожен крок повторював би всю попередню роботу.
 
-#### Verifying Your Pipeline
+#### Перевірка вашого пайплайну
 
-After pushing `ci.yml`, go to your GitHub repository and click the **Actions** tab. You should see your workflow running. A green check mark means all steps passed. A red X means something failed -- click into it to see the logs.
+Після push файлу `ci.yml` перейдіть до вашого репозиторію на GitHub та натисніть вкладку **Actions**. Ви повинні побачити ваш workflow у виконанні. Зелена галочка означає, що всі кроки пройшли успішно. Червоний хрестик означає, що щось не вдалося — натисніть на нього, щоб переглянути логи.
 
-### Task 2 — Code Coverage Gate
+### Завдання 2 — Якісний шлюз покриття коду
 
-Extend the pipeline to:
+Розширте пайплайн для:
 
-1. Collect coverage with Coverlet:
+1. Збору покриття за допомогою Coverlet:
    ```yaml
    - name: Test with coverage
      run: dotnet test --collect:"XPlat Code Coverage" --results-directory ./coverage
    ```
-2. Generate HTML report with ReportGenerator
-3. Upload coverage report as GitHub Actions artifact
-4. Add a coverage threshold — fail the pipeline if coverage drops below 80%
-5. Configure the pipeline to also run on `pull_request` events
+2. Генерації HTML-звіту за допомогою ReportGenerator
+3. Завантаження звіту покриття як артефакту GitHub Actions
+4. Додайте поріг покриття — пайплайн повинен завершитися невдачею, якщо покриття падає нижче 80%
+5. Налаштуйте пайплайн для запуску також на події `pull_request`
 
-#### Complete Coverage Pipeline Example
+#### Повний приклад пайплайну покриття
 
 ```yaml
 - name: Test with coverage
@@ -208,21 +208,21 @@ Extend the pipeline to:
     fi
 ```
 
-> **Hint:** The coverage threshold step parses the coverage percentage from the text summary report and fails if it is below 80%. You can adjust this threshold to match your project's needs. In practice, teams often start with a lower threshold and increase it over time.
+> **Підказка:** Крок перевірки порогу покриття аналізує відсоток покриття з текстового звіту та завершується невдачею, якщо він нижче 80%. Ви можете налаштувати цей поріг відповідно до потреб вашого проекту. На практиці команди часто починають з нижчого порогу та підвищують його з часом.
 
-#### Coverage Output Formats
+#### Формати виводу покриття
 
-| Format | Use Case |
-|--------|----------|
-| `Cobertura` | Machine-readable XML; input for ReportGenerator and other tools |
-| `Html` | Human-readable report with file-by-file drill-down |
-| `TextSummary` | Quick text summary for CI logs |
-| `Badges` | SVG badges for README display |
-| `lcov` | Compatible with many code quality platforms |
+| Формат | Призначення |
+|--------|-------------|
+| `Cobertura` | Машиночитаний XML; вхідні дані для ReportGenerator та інших інструментів |
+| `Html` | Зручний для читання звіт з деталізацією по файлах |
+| `TextSummary` | Швидке текстове зведення для CI-логів |
+| `Badges` | SVG-значки для відображення у README |
+| `lcov` | Сумісний з багатьма платформами якості коду |
 
-### Task 3 — Matrix Testing
+### Завдання 3 — Матричне тестування
 
-Configure the pipeline to test across multiple configurations:
+Налаштуйте пайплайн для тестування у декількох конфігураціях:
 
 ```yaml
 strategy:
@@ -231,10 +231,10 @@ strategy:
     dotnet-version: ['9.0.x', '10.0.x']
 ```
 
-1. Run tests on all OS + .NET version combinations
-2. Ensure all matrix jobs must pass for the pipeline to succeed
+1. Запускайте тести на всіх комбінаціях ОС + версія .NET
+2. Переконайтеся, що всі матричні job-и повинні пройти для успішного завершення пайплайну
 
-#### Full Matrix Job Example
+#### Повний приклад матричного job
 
 ```yaml
 jobs:
@@ -270,40 +270,40 @@ jobs:
         run: dotnet format --verify-no-changes --verbosity diagnostic
 ```
 
-#### Matrix Behavior Reference
+#### Довідник поведінки матриці
 
-| Setting | Effect |
-|---------|--------|
-| `fail-fast: true` (default) | Cancel all matrix jobs if any one fails |
-| `fail-fast: false` | Run all matrix jobs even if some fail |
-| `exclude` | Remove specific combinations from the matrix |
-| `include` | Add specific combinations to the matrix |
+| Налаштування | Ефект |
+|-------------|-------|
+| `fail-fast: true` (за замовчуванням) | Скасувати всі матричні job-и, якщо будь-який з них не вдався |
+| `fail-fast: false` | Виконати всі матричні job-и, навіть якщо деякі не вдалися |
+| `exclude` | Видалити конкретні комбінації з матриці |
+| `include` | Додати конкретні комбінації до матриці |
 
-> **Hint:** Set `fail-fast: false` during development so you can see which specific OS/version combinations fail. In production pipelines, `fail-fast: true` saves CI minutes by stopping early.
+> **Підказка:** Встановіть `fail-fast: false` під час розробки, щоб бачити, які саме комбінації ОС/версій не вдалися. У продуктивних пайплайнах `fail-fast: true` економить хвилини CI, зупиняючись раніше.
 
-## Grading
+## Оцінювання
 
-| Criteria |
+| Критерії |
 |----------|
-| Task 1 — Basic CI pipeline |
-| Task 2 — Coverage gate |
-| Task 3 — Matrix testing |
+| Завдання 1 — Базовий CI-пайплайн |
+| Завдання 2 — Якісний шлюз покриття |
+| Завдання 3 — Матричне тестування |
 
-## Submission
+## Здача роботи
 
-- GitHub repository URL with working pipeline
+- URL репозиторію на GitHub з працюючим пайплайном
 
-## References
+## Посилання
 
-- [GitHub Actions Documentation](https://docs.github.com/en/actions) -- official reference for all GitHub Actions features
-- [GitHub Actions Workflow Syntax](https://docs.github.com/en/actions/reference/workflow-syntax-for-github-actions) -- YAML syntax reference
-- [actions/checkout](https://github.com/actions/checkout) -- checkout action used in every workflow
-- [actions/setup-dotnet](https://github.com/actions/setup-dotnet) -- .NET SDK setup action
-- [actions/upload-artifact](https://github.com/actions/upload-artifact) -- uploading build artifacts
-- [dorny/test-reporter](https://github.com/dorny/test-reporter) -- publishing test results on PRs
-- [Coverlet GitHub Repository](https://github.com/coverlet-coverage/coverlet) -- .NET code coverage library
-- [Coverlet Documentation: Integration with MSBuild](https://github.com/coverlet-coverage/coverlet/blob/master/Documentation/MSBuildIntegration.md) -- advanced Coverlet configuration
-- [ReportGenerator](https://github.com/danielpalme/ReportGenerator) -- converting coverage files to HTML reports
-- [GitHub Branch Protection Rules](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-a-branch-protection-rule) -- configuring quality gates
-- [dotnet test CLI Reference](https://learn.microsoft.com/en-us/dotnet/core/tools/dotnet-test) -- all flags and options for `dotnet test`
-- [dotnet format CLI Reference](https://learn.microsoft.com/en-us/dotnet/core/tools/dotnet-format) -- code style enforcement tool
+- [Документація GitHub Actions](https://docs.github.com/en/actions) -- офіційний довідник усіх можливостей GitHub Actions
+- [Синтаксис Workflow GitHub Actions](https://docs.github.com/en/actions/reference/workflow-syntax-for-github-actions) -- довідник синтаксису YAML
+- [actions/checkout](https://github.com/actions/checkout) -- action для checkout, що використовується у кожному workflow
+- [actions/setup-dotnet](https://github.com/actions/setup-dotnet) -- action для налаштування .NET SDK
+- [actions/upload-artifact](https://github.com/actions/upload-artifact) -- завантаження артефактів збірки
+- [dorny/test-reporter](https://github.com/dorny/test-reporter) -- публікація результатів тестів у PR
+- [Репозиторій Coverlet на GitHub](https://github.com/coverlet-coverage/coverlet) -- бібліотека покриття коду для .NET
+- [Документація Coverlet: Інтеграція з MSBuild](https://github.com/coverlet-coverage/coverlet/blob/master/Documentation/MSBuildIntegration.md) -- розширена конфігурація Coverlet
+- [ReportGenerator](https://github.com/danielpalme/ReportGenerator) -- конвертація файлів покриття в HTML-звіти
+- [Правила захисту гілок GitHub](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-a-branch-protection-rule) -- налаштування якісних шлюзів
+- [Довідник CLI dotnet test](https://learn.microsoft.com/en-us/dotnet/core/tools/dotnet-test) -- всі прапорці та опції для `dotnet test`
+- [Довідник CLI dotnet format](https://learn.microsoft.com/en-us/dotnet/core/tools/dotnet-format) -- інструмент контролю стилю коду

@@ -1,46 +1,46 @@
-# Lab 3 — Integration Testing: Components
+# Лабораторна 3 — Інтеграційне тестування: Компоненти
 
-## Objective
+## Мета
 
-Learn to write integration tests that verify how multiple components work together. Test real interactions between services, repositories, and middleware without mocking everything.
+Навчитися писати інтеграційні тести, що перевіряють спільну роботу кількох компонентів. Тестувати реальну взаємодію між сервісами, репозиторіями та проміжним програмним забезпеченням (middleware) без повної імітації всього.
 
-**Duration:** 60 minutes
+**Тривалість:** 60 хвилин
 
-## Prerequisites
+## Передумови
 
-Before starting this lab, make sure you have:
+Перед початком цієї лабораторної переконайтеся, що:
 
-- .NET 10+ SDK installed (`dotnet --version`)
-- A working understanding of ASP.NET Core middleware pipeline, dependency injection, and the controller/service/repository pattern
-- Familiarity with xUnit v3 test lifecycle (`IAsyncLifetime`, `IClassFixture<T>`)
-- Completed Lab 1 and Lab 2 (unit testing fundamentals and mocking)
+- Встановлений .NET 10+ SDK (`dotnet --version`)
+- Ви маєте робоче розуміння конвеєра middleware ASP.NET Core, впровадження залежностей та шаблону контролер/сервіс/репозиторій
+- Ви знайомі з життєвим циклом тестів xUnit v3 (`IAsyncLifetime`, `IClassFixture<T>`)
+- Виконані Лабораторна 1 та Лабораторна 2 (основи модульного тестування та імітації)
 
-## Key Concepts
+## Ключові поняття
 
 ### WebApplicationFactory
 
-`WebApplicationFactory<TEntryPoint>` bootstraps your ASP.NET Core application in-memory for testing. It creates a `TestServer` and an `HttpClient` that sends requests directly to the pipeline without network overhead. You subclass it to customize services, configuration, or middleware.
+`WebApplicationFactory<TEntryPoint>` розгортає ваш застосунок ASP.NET Core у пам'яті для тестування. Він створює `TestServer` та `HttpClient`, що надсилає запити безпосередньо до конвеєра без мережевих витрат. Ви можете створити підклас для налаштування сервісів, конфігурації або middleware.
 
-### Middleware Pipeline
+### Конвеєр Middleware
 
-ASP.NET Core processes every HTTP request through an ordered pipeline of middleware components. Integration tests verify that the entire pipeline (authentication, logging, exception handling, routing, controller execution) works together as expected.
+ASP.NET Core обробляє кожен HTTP-запит через упорядкований конвеєр компонентів middleware. Інтеграційні тести перевіряють, що весь конвеєр (автентифікація, журналювання, обробка винятків, маршрутизація, виконання контролера) працює разом як очікувалося.
 
-### Dependency Injection in Tests
+### Впровадження залежностей у тестах
 
-The DI container can be reconfigured inside `WebApplicationFactory.WithWebHostBuilder` to replace real services with test doubles or in-memory implementations. This lets you test real component interactions while controlling external dependencies.
+DI-контейнер можна переналаштувати всередині `WebApplicationFactory.WithWebHostBuilder`, щоб замінити реальні сервіси тестовими замінниками або реалізаціями у пам'яті. Це дозволяє тестувати реальну взаємодію компонентів, контролюючи зовнішні залежності.
 
-### Test Isolation
+### Ізоляція тестів
 
-Each test must be independent. Shared state between tests leads to flaky results. Use unique database names, fresh `HttpClient` instances, or `IAsyncLifetime` to set up and tear down per-test state.
+Кожен тест повинен бути незалежним. Спільний стан між тестами призводить до нестабільних результатів. Використовуйте унікальні імена баз даних, нові екземпляри `HttpClient` або `IAsyncLifetime` для налаштування та очищення стану кожного тесту.
 
-## Tools
+## Інструменти
 
-- Language: C#
-- Framework: [xUnit v3](https://xunit.net/) (`xunit.v3`)
-- Web: [ASP.NET Core TestServer](https://learn.microsoft.com/en-us/aspnet/core/test/integration-tests)
+- Мова: C#
+- Фреймворк: [xUnit v3](https://xunit.net/) (`xunit.v3`)
+- Веб: [ASP.NET Core TestServer](https://learn.microsoft.com/en-us/aspnet/core/test/integration-tests)
 - DI: `Microsoft.Extensions.DependencyInjection`
 
-## Setup
+## Налаштування
 
 ```bash
 dotnet new sln -n Lab3
@@ -54,26 +54,26 @@ dotnet add Lab3.Tests package Microsoft.AspNetCore.Mvc.Testing
 dotnet add Lab3.Tests package Shouldly
 ```
 
-## Tasks
+## Завдання
 
-### Task 1 — WebApplicationFactory Setup
+### Завдання 1 — Налаштування WebApplicationFactory
 
-Create a minimal ASP.NET Core Web API with:
+Створіть мінімальний ASP.NET Core Web API з:
 
-- `ProductsController` with CRUD endpoints (`GET`, `POST`, `PUT`, `DELETE`)
-- `IProductRepository` interface with in-memory implementation
-- Service registration in `Program.cs`
+- `ProductsController` з CRUD-ендпоінтами (`GET`, `POST`, `PUT`, `DELETE`)
+- Інтерфейсом `IProductRepository` з реалізацією у пам'яті
+- Реєстрацією сервісів у `Program.cs`
 
-Write integration tests using `WebApplicationFactory<Program>`:
+Напишіть інтеграційні тести з використанням `WebApplicationFactory<Program>`:
 
-1. Create a custom `WebApplicationFactory` that replaces the real repository with a seeded in-memory one
-2. Test `GET /api/products` returns all seeded products
-3. Test `GET /api/products/{id}` returns 200 for existing and 404 for non-existing
-4. Test `POST /api/products` creates a product and returns 201
+1. Створіть власну `WebApplicationFactory`, що замінює реальний репозиторій на попередньо заповнений репозиторій у пам'яті
+2. Протестуйте, що `GET /api/products` повертає всі попередньо додані продукти
+3. Протестуйте, що `GET /api/products/{id}` повертає 200 для існуючого та 404 для неіснуючого
+4. Протестуйте, що `POST /api/products` створює продукт та повертає 201
 
-**Minimum test count: 5 tests**
+**Мінімальна кількість тестів: 5 тестів**
 
-#### Example: Custom WebApplicationFactory
+#### Приклад: Власна WebApplicationFactory
 
 ```csharp
 public class CustomWebApplicationFactory : WebApplicationFactory<Program>
@@ -101,7 +101,7 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
 }
 ```
 
-#### Example: Integration Test with Shouldly
+#### Приклад: Інтеграційний тест з Shouldly
 
 ```csharp
 public class ProductsApiTests : IClassFixture<CustomWebApplicationFactory>
@@ -153,37 +153,37 @@ public class ProductsApiTests : IClassFixture<CustomWebApplicationFactory>
 }
 ```
 
-#### Expected Behavior Table
+#### Таблиця очікуваної поведінки
 
-| Endpoint | Scenario | Expected Status | Expected Body |
+| Ендпоінт | Сценарій | Очікуваний статус | Очікуване тіло відповіді |
 |---|---|---|---|
-| `GET /api/products` | Seeded data exists | 200 OK | Array of 2 products |
-| `GET /api/products/1` | Product exists | 200 OK | Product JSON |
-| `GET /api/products/999` | Product not found | 404 Not Found | Error or empty |
-| `POST /api/products` | Valid product | 201 Created | Created product + Location header |
-| `PUT /api/products/1` | Valid update | 200 OK | Updated product |
-| `DELETE /api/products/1` | Product exists | 204 No Content | Empty |
+| `GET /api/products` | Існують попередньо додані дані | 200 OK | Масив з 2 продуктів |
+| `GET /api/products/1` | Продукт існує | 200 OK | JSON продукту |
+| `GET /api/products/999` | Продукт не знайдено | 404 Not Found | Помилка або порожньо |
+| `POST /api/products` | Валідний продукт | 201 Created | Створений продукт + заголовок Location |
+| `PUT /api/products/1` | Валідне оновлення | 200 OK | Оновлений продукт |
+| `DELETE /api/products/1` | Продукт існує | 204 No Content | Порожньо |
 
-> **Hint:** Make `Program` accessible to tests by adding `public partial class Program { }` at the bottom of your `Program.cs`, or by adding `[assembly: InternalsVisibleTo("Lab3.Tests")]` in the API project.
+> **Підказка:** Зробіть `Program` доступним для тестів, додавши `public partial class Program { }` в кінці `Program.cs`, або додавши `[assembly: InternalsVisibleTo("Lab3.Tests")]` у проєкті API.
 
-### Task 2 — Middleware and Pipeline Testing
+### Завдання 2 — Тестування Middleware та конвеєра
 
-Add the following middleware to the API:
+Додайте наступне middleware до API:
 
-- Request logging middleware (logs method, path, status code)
-- Exception handling middleware (catches unhandled exceptions, returns 500 with JSON error)
-- API key authentication middleware (checks `X-Api-Key` header)
+- Middleware журналювання запитів (логує метод, шлях, код статусу)
+- Middleware обробки винятків (перехоплює необроблені винятки, повертає 500 з JSON-помилкою)
+- Middleware автентифікації за API-ключем (перевіряє заголовок `X-Api-Key`)
 
-Write integration tests that:
+Напишіть інтеграційні тести, що:
 
-1. Verify requests without `X-Api-Key` return 401
-2. Verify requests with invalid key return 403
-3. Verify unhandled exceptions return structured JSON error response
-4. Verify the pipeline processes requests in correct order
+1. Перевіряють, що запити без `X-Api-Key` повертають 401
+2. Перевіряють, що запити з невалідним ключем повертають 403
+3. Перевіряють, що необроблені винятки повертають структуровану JSON-відповідь з помилкою
+4. Перевіряють, що конвеєр обробляє запити у правильному порядку
 
-**Minimum test count: 5 tests**
+**Мінімальна кількість тестів: 5 тестів**
 
-#### Example: Middleware Test with Shouldly
+#### Приклад: Тест Middleware з Shouldly
 
 ```csharp
 [Fact]
@@ -237,36 +237,36 @@ public async Task UnhandledException_ReturnsStructuredJsonErrorAsync()
 }
 ```
 
-#### Expected Behavior Table
+#### Таблиця очікуваної поведінки
 
-| Scenario | `X-Api-Key` Header | Expected Status |
+| Сценарій | Заголовок `X-Api-Key` | Очікуваний статус |
 |---|---|---|
-| No header sent | (absent) | 401 Unauthorized |
-| Invalid key | `"wrong-key"` | 403 Forbidden |
-| Valid key | `"valid-test-key"` | 200 OK (or endpoint result) |
-| Endpoint throws exception | Valid key | 500 with JSON body |
+| Заголовок не надіслано | (відсутній) | 401 Unauthorized |
+| Невалідний ключ | `"wrong-key"` | 403 Forbidden |
+| Валідний ключ | `"valid-test-key"` | 200 OK (або результат ендпоінта) |
+| Ендпоінт кидає виняток | Валідний ключ | 500 з JSON-тілом |
 
-> **Hint:** For pipeline ordering, consider adding a custom response header from each middleware (e.g., `X-Pipeline-Step: 1`, `X-Pipeline-Step: 2`) and verifying the order in the response.
+> **Підказка:** Для перевірки порядку конвеєра розгляньте можливість додавання власного заголовка відповіді з кожного middleware (наприклад, `X-Pipeline-Step: 1`, `X-Pipeline-Step: 2`) та перевірки порядку у відповіді.
 
-## Grading
+## Оцінювання
 
-| Criteria |
+| Критерії |
 |----------|
-| Task 1 — WebApplicationFactory tests |
-| Task 2 — Middleware tests |
-| Proper test isolation (each test is independent) |
-| Use of `IClassFixture` or `IAsyncLifetime` |
+| Завдання 1 — Тести WebApplicationFactory |
+| Завдання 2 — Тести Middleware |
+| Належна ізоляція тестів (кожен тест незалежний) |
+| Використання `IClassFixture` або `IAsyncLifetime` |
 
-## Submission
+## Здача роботи
 
-- Solution with `Lab3.Api` and `Lab3.Tests` projects
-- Tests should pass with `dotnet test` without any external dependencies
+- Рішення з проєктами `Lab3.Api` та `Lab3.Tests`
+- Тести повинні проходити з `dotnet test` без зовнішніх залежностей
 
-## References
+## Посилання
 
-- [Integration tests in ASP.NET Core](https://learn.microsoft.com/en-us/aspnet/core/test/integration-tests) — official Microsoft guide to `WebApplicationFactory`
-- [xUnit v3 Documentation](https://xunit.net/docs/getting-started/v3/cmdline) — test framework reference
-- [Shouldly Documentation](https://docs.shouldly.org/) — assertion library API
-- [ASP.NET Core Middleware](https://learn.microsoft.com/en-us/aspnet/core/fundamentals/middleware/) — middleware pipeline concepts
-- [Dependency Injection in ASP.NET Core](https://learn.microsoft.com/en-us/aspnet/core/fundamentals/dependency-injection) — service lifetimes (Transient, Scoped, Singleton)
-- [Andrew Lock: Integration Testing with WebApplicationFactory](https://andrewlock.net/introduction-to-integration-testing-with-xunit-and-testserver-in-asp-net-core/) — practical walkthrough
+- [Інтеграційні тести в ASP.NET Core](https://learn.microsoft.com/en-us/aspnet/core/test/integration-tests) — офіційний посібник Microsoft з `WebApplicationFactory`
+- [Документація xUnit v3](https://xunit.net/docs/getting-started/v3/cmdline) — довідник тестового фреймворку
+- [Документація Shouldly](https://docs.shouldly.org/) — API бібліотеки перевірок
+- [Middleware ASP.NET Core](https://learn.microsoft.com/en-us/aspnet/core/fundamentals/middleware/) — концепції конвеєра middleware
+- [Впровадження залежностей в ASP.NET Core](https://learn.microsoft.com/en-us/aspnet/core/fundamentals/dependency-injection) — час життя сервісів (Transient, Scoped, Singleton)
+- [Andrew Lock: Інтеграційне тестування з WebApplicationFactory](https://andrewlock.net/introduction-to-integration-testing-with-xunit-and-testserver-in-asp-net-core/) — практичний покроковий посібник

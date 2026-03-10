@@ -1,49 +1,49 @@
-# Lab 15 — Individual Project Defense: Presentations
+# Лабораторна 15 — Захист індивідуального проекту: презентації
 
-## Objective
+## Мета
 
-Present and defend your individual testing project to the instructor.
+Презентувати та захистити свій індивідуальний проект з тестування перед викладачем.
 
-## Defense Schedule
+## Розклад захисту
 
-Each student has **15-20 minutes**:
+Кожен студент має **15-20 хвилин**:
 
-| Phase | Duration | Activity |
+| Фаза | Тривалість | Діяльність |
 |---|---|---|
-| Presentation | 5-7 min | Show architecture, tests, coverage, k6 results |
-| Live Demo | 5-7 min | Run tests and k6 live |
-| Q&A | 5 min | Answer questions about your testing decisions |
+| Презентація | 5-7 хв | Показати архітектуру, тести, покриття, результати k6 |
+| Жива демонстрація | 5-7 хв | Запустити тести та k6 наживо |
+| Запитання та відповіді | 5 хв | Відповісти на запитання про ваші рішення щодо тестування |
 
-## Before Your Turn
+## Перед вашою чергою
 
-1. Ensure Docker is running (for Testcontainers)
-2. Pull your latest code: `git pull`
-3. Verify tests pass: `dotnet test`
-4. Have your API ready to start for k6 demo
-5. Have coverage report generated
+1. Переконайтеся, що Docker працює (для Testcontainers)
+2. Завантажте останній код: `git pull`
+3. Перевірте, що тести проходять: `dotnet test`
+4. Підготуйте API до запуску для демонстрації k6
+5. Згенеруйте звіт покриття
 
-## Presentation Tips
+## Поради щодо презентації
 
-- Start with a **brief** overview of your domain (1-2 min max) — the focus is on testing, not the app itself
-- Show the **test pyramid** of your project: how many unit / integration / database / performance tests
-- Highlight one interesting test that catches a non-obvious bug
-- Show the coverage report and explain any uncovered areas
-- Present k6 results: what load could your API handle?
+- Почніть з **короткого** огляду вашої предметної області (1-2 хв максимум) — фокус на тестуванні, а не на самому застосунку
+- Покажіть **піраміду тестування** вашого проекту: скільки модульних / інтеграційних / тестів бази даних / тестів продуктивності
+- Виділіть один цікавий тест, який виявляє неочевидний баг
+- Покажіть звіт покриття та поясніть будь-які непокриті ділянки
+- Представте результати k6: яке навантаження витримує ваш API?
 
-## Evaluation Criteria
+## Критерії оцінювання
 
-See Lab 13 for detailed grading breakdown:
+Детальний розподіл оцінок дивіться у Лабораторній 13:
 
-| Criteria | Weight |
+| Критерії | Вага |
 |---|---|
-| Unit tests (quality, NSubstitute) | 20% |
-| Integration tests (WebApplicationFactory) | 20% |
-| Database tests (Testcontainers) | 20% |
-| k6 performance tests | 15% |
-| Code coverage ≥ 80% | 10% |
-| Presentation and defense | 15% |
+| Модульні тести (якість, NSubstitute) | 20% |
+| Інтеграційні тести (WebApplicationFactory) | 20% |
+| Тести бази даних (Testcontainers) | 20% |
+| Тести продуктивності k6 | 15% |
+| Покриття коду ≥ 80% | 10% |
+| Презентація та захист | 15% |
 
-## After Defense
+## Після захисту
 
-- Instructor provides feedback and grade
-- No further submissions required after successful defense
+- Викладач надає зворотний зв'язок та оцінку
+- Подальші здачі після успішного захисту не потрібні

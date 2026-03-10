@@ -1,112 +1,112 @@
-# Lecture 2: Unit Testing and Mocking
+# Лекція 2: Модульне тестування та мокування
 
-## Learning Objectives
+## Навчальні цілі
 
-By the end of this lecture, students will be able to:
+Після завершення цієї лекції студенти зможуть:
 
-- Explain the principles and value of unit testing
-- Structure tests using the Arrange-Act-Assert (AAA) pattern
-- Write parameterized tests with `[Fact]` and `[Theory]`
-- Understand test doubles: stubs, mocks, fakes, and spies
-- Use NSubstitute to isolate dependencies in unit tests
-- Apply best practices for naming, organizing, and maintaining tests
+- Пояснити принципи та цінність модульного тестування
+- Структурувати тести за патерном Arrange-Act-Assert (AAA)
+- Писати параметризовані тести з `[Fact]` та `[Theory]`
+- Розуміти тестові дублери: стаби, моки, фейки та шпигуни
+- Використовувати NSubstitute для ізоляції залежностей у модульних тестах
+- Застосовувати найкращі практики іменування, організації та підтримки тестів
 
 ---
 
-## 1. Recap: What is Unit Testing?
+## 1. Підсумок: Що таке модульне тестування?
 
-### 1.1 Definition
+### 1.1 Визначення
 
-A **unit test** verifies the smallest testable piece of software — typically a single method or function — **in isolation** from its dependencies.
+**Модульний тест** перевіряє найменшу тестовану частину ПЗ — зазвичай окремий метод або функцію — **ізольовано** від залежностей.
 
 ```
 ┌──────────────────────────────────────────────┐
-│  Unit Test                                   │
+│  Модульний тест                              │
 │                                              │
-│   Input ──► [Method Under Test] ──► Output   │
+│   Вхід ──► [Метод, що тестується] ──► Вихід  │
 │                     │                        │
-│              (dependencies are               │
-│               mocked/stubbed)                │
+│              (залежності замінені            │
+│               моками/стабами)               │
 │                                              │
-│   Assert: output matches expectation         │
+│   Перевірка: вихід відповідає очікуванню     │
 └──────────────────────────────────────────────┘
 ```
 
-### 1.2 F.I.R.S.T. Principles
+### 1.2 Принципи F.I.R.S.T.
 
-Good unit tests follow the **F.I.R.S.T.** principles:
+Хороші модульні тести дотримуються принципів **F.I.R.S.T.**:
 
-| Principle | Description |
+| Принцип | Опис |
 |---|---|
-| **Fast** | Run in milliseconds; the full suite in seconds |
-| **Isolated** | No dependencies on other tests, databases, network, file system |
-| **Repeatable** | Same result every time, in any environment |
-| **Self-validating** | Pass or fail automatically — no manual inspection |
-| **Timely** | Written close in time to the production code |
+| **Fast (Швидкі)** | Виконуються за мілісекунди; весь набір — за секунди |
+| **Isolated (Ізольовані)** | Без залежностей від інших тестів, баз даних, мережі, файлової системи |
+| **Repeatable (Повторювані)** | Однаковий результат кожного разу, в будь-якому середовищі |
+| **Self-validating (Самоперевірні)** | Проходять або не проходять автоматично — без ручної перевірки |
+| **Timely (Своєчасні)** | Написані близько за часом до продакшн-коду |
 
-### 1.3 What Makes a Good Unit Test?
+### 1.3 Що робить модульний тест хорошим?
 
 ```
-Good Unit Test                      Bad Unit Test
-───────────────                     ─────────────
-✓ Tests one behavior                ✗ Tests multiple things
-✓ Descriptive name                  ✗ Named "Test1", "TestMethod"
-✓ Independent of other tests        ✗ Depends on test execution order
-✓ Fast (milliseconds)               ✗ Slow (calls DB, network)
-✓ Deterministic                     ✗ Flaky (depends on time, random)
-✓ Easy to read and understand       ✗ Complex setup, unclear intent
+Хороший модульний тест             Поганий модульний тест
+───────────────────                ─────────────────────
+✓ Тестує одну поведінку            ✗ Тестує кілька речей
+✓ Описова назва                    ✗ Називається "Test1", "TestMethod"
+✓ Незалежний від інших тестів       ✗ Залежить від порядку виконання тестів
+✓ Швидкий (мілісекунди)            ✗ Повільний (викликає БД, мережу)
+✓ Детерміністичний                 ✗ Нестабільний (залежить від часу, випадковості)
+✓ Легкий для читання та розуміння  ✗ Складне налаштування, нечіткий намір
 ```
 
 ---
 
-## 2. Anatomy of a Unit Test
+## 2. Анатомія модульного тесту
 
-### 2.1 The AAA Pattern
+### 2.1 Патерн AAA
 
-Every well-structured test follows **Arrange-Act-Assert**:
+Кожен добре структурований тест дотримується **Arrange-Act-Assert**:
 
 ```csharp
 [Fact]
 public void MethodName_Scenario_ExpectedBehavior()
 {
-    // Arrange — set up preconditions and inputs
+    // Arrange — налаштування передумов та вхідних даних
     var service = new PriceCalculator();
     var basePrice = 100m;
 
-    // Act — execute the behavior under test
+    // Act — виконання поведінки, що тестується
     var result = service.CalculateWithTax(basePrice, taxRate: 0.2m);
 
-    // Assert — verify the expected outcome
+    // Assert — перевірка очікуваного результату
     result.ShouldBe(120m);
 }
 ```
 
-**Guidelines:**
-- Each section should be clearly identifiable (comments are optional once you're used to the pattern)
-- Prefer a **single Act** — one method call per test
-- Prefer **focused assertions** — assert one logical concept (can be multiple `ShouldBe` calls if they verify the same concept)
+**Рекомендації:**
+- Кожна секція повинна бути чітко ідентифікована (коментарі необов'язкові, коли ви звикли до патерну)
+- Надавайте перевагу **одному Act** — один виклик методу на тест
+- Надавайте перевагу **сфокусованим перевіркам** — перевіряйте одну логічну концепцію (може бути кілька викликів `ShouldBe`, якщо вони перевіряють ту саму концепцію)
 
-### 2.2 Test Naming Conventions
+### 2.2 Конвенції іменування тестів
 
-Test names should describe the **behavior**, not the implementation:
+Назви тестів повинні описувати **поведінку**, а не реалізацію:
 
 ```
-MethodName_Scenario_ExpectedBehavior
+ MethodName_Scenario_ExpectedBehavior
 ```
 
-| Good | Bad |
+| Добре | Погано |
 |---|---|
 | `CalculateTotal_EmptyCart_ReturnsZero` | `TestCalculateTotal` |
 | `Login_InvalidPassword_ThrowsAuthException` | `LoginTest2` |
 | `IsEligible_AgeBelow18_ReturnsFalse` | `CheckAge` |
 
-The name should read like a specification: *"When I call CalculateTotal on an empty cart, it returns zero."*
+Назва повинна читатися як специфікація: *"Коли я викликаю CalculateTotal на порожньому кошику, він повертає нуль."*
 
 ### 2.3 `[Fact]` vs. `[Theory]`
 
-#### `[Fact]` — Single Test Case
+#### `[Fact]` — Один тестовий випадок
 
-Use when a test has fixed inputs:
+Використовується, коли тест має фіксовані вхідні дані:
 
 ```csharp
 [Fact]
@@ -117,9 +117,9 @@ public void Add_TwoPositiveNumbers_ReturnsSum()
 }
 ```
 
-#### `[Theory]` — Parameterized Test Cases
+#### `[Theory]` — Параметризовані тестові випадки
 
-Use when the same logic should be tested with multiple inputs:
+Використовується, коли та сама логіка повинна бути протестована з різними вхідними даними:
 
 ```csharp
 [Theory]
@@ -135,10 +135,10 @@ public void Add_VariousInputs_ReturnsExpectedSum(
 }
 ```
 
-#### Other Data Sources for `[Theory]`
+#### Інші джерела даних для `[Theory]`
 
 ```csharp
-// MemberData — use a method or property for complex test data
+// MemberData — використовуйте метод або властивість для складних тестових даних
 [Theory]
 [MemberData(nameof(GetDiscountTestCases))]
 public void ApplyDiscount_VariousCases_ReturnsExpected(
@@ -159,32 +159,32 @@ public static IEnumerable<object[]> GetDiscountTestCases()
 
 ---
 
-## 3. Shouldly: Expressive Assertions
+## 3. Shouldly: Виразні перевірки
 
-### 3.1 Why Shouldly?
+### 3.1 Чому Shouldly?
 
-Compare the error messages:
+Порівняйте повідомлення про помилки:
 
 ```
-// xUnit built-in assert
+// Вбудована перевірка xUnit
 Assert.Equal(5, result);
-// Output: Assert.Equal() Failure. Expected: 5, Actual: 4
+// Вивід: Assert.Equal() Failure. Expected: 5, Actual: 4
 
 // Shouldly
 result.ShouldBe(5);
-// Output: result should be 5 but was 4
+// Вивід: result should be 5 but was 4
 ```
 
-Shouldly produces **human-readable error messages** that include the variable name.
+Shouldly створює **людиночитабельні повідомлення про помилки**, що включають назву змінної.
 
-### 3.2 Common Shouldly Assertions
+### 3.2 Поширені перевірки Shouldly
 
 ```csharp
-// Equality
+// Рівність
 result.ShouldBe(42);
 name.ShouldBe("Alice");
 
-// Boolean
+// Логічні значення
 isValid.ShouldBeTrue();
 isEmpty.ShouldBeFalse();
 
@@ -192,106 +192,106 @@ isEmpty.ShouldBeFalse();
 order.ShouldNotBeNull();
 deletedItem.ShouldBeNull();
 
-// Numeric comparisons
+// Числові порівняння
 temperature.ShouldBeGreaterThan(0);
 discount.ShouldBeLessThanOrEqualTo(100);
 balance.ShouldBePositive();
 diff.ShouldBeNegative();
 
-// Collections
+// Колекції
 items.ShouldNotBeEmpty();
 items.Count.ShouldBe(3);
 items.ShouldContain("Apple");
 items.ShouldAllBe(i => i.Price > 0);
 items.ShouldBeInOrder();
 
-// Strings
+// Рядки
 email.ShouldContain("@");
 name.ShouldStartWith("Dr.");
 code.ShouldMatch(@"^[A-Z]{3}-\d{4}$"); // regex
 
-// Type checking
+// Перевірка типу
 shape.ShouldBeOfType<Circle>();
 animal.ShouldBeAssignableTo<IMammal>();
 
-// Exceptions
+// Винятки
 Should.Throw<ArgumentNullException>(() => service.Process(null!));
 var ex = Should.Throw<InvalidOperationException>(
     () => account.Withdraw(1000));
 ex.Message.ShouldContain("insufficient funds");
 
-// Async exceptions
+// Асинхронні винятки
 await Should.ThrowAsync<TimeoutException>(
     () => service.FetchDataAsync());
 
-// Approximate equality (for floating point)
+// Приблизна рівність (для чисел з плаваючою комою)
 result.ShouldBe(3.14, tolerance: 0.01);
 
-// Time-based
+// Перевірки часу
 elapsed.ShouldBeLessThan(TimeSpan.FromSeconds(5));
 ```
 
 ---
 
-## 4. Test Doubles
+## 4. Тестові дублери
 
-### 4.1 Why Test Doubles?
+### 4.1 Навіщо потрібні тестові дублери?
 
-In real applications, classes depend on other classes. Unit tests need to **isolate** the class under test from its dependencies:
+У реальних додатках класи залежать від інших класів. Модульні тести повинні **ізолювати** клас, що тестується, від його залежностей:
 
 ```
-Production Code:                   Unit Test:
+Продакшн-код:                     Модульний тест:
 ┌──────────┐                       ┌──────────┐
 │  Order   │──► IPaymentGateway    │  Order   │──► Fake/Mock
 │ Service  │──► IEmailSender       │ Service  │──► Fake/Mock
 │          │──► IOrderRepository   │          │──► Fake/Mock
 └──────────┘                       └──────────┘
      │                                  │
-Uses real services                 Uses test doubles
-(DB, email, payment)               (fast, controlled, isolated)
+Використовує реальні сервіси       Використовує тестові дублери
+(БД, email, платежі)               (швидко, контрольовано, ізольовано)
 ```
 
-### 4.2 Types of Test Doubles
+### 4.2 Типи тестових дублерів
 
-| Type | Purpose | Example |
+| Тип | Призначення | Приклад |
 |---|---|---|
-| **Dummy** | Fills a parameter; never actually used | `new object()` passed to satisfy a signature |
-| **Stub** | Returns predetermined values | Always returns `true` for `IsAvailable()` |
-| **Spy** | Records calls for later verification | Records that `SendEmail()` was called twice |
-| **Mock** | Pre-programmed with expectations | Expects `Save()` to be called exactly once |
-| **Fake** | Working implementation (simplified) | In-memory database instead of real DB |
+| **Dummy** | Заповнює параметр; ніколи не використовується | `new object()` для задоволення сигнатури |
+| **Stub** | Повертає заздалегідь визначені значення | Завжди повертає `true` для `IsAvailable()` |
+| **Spy** | Записує виклики для подальшої перевірки | Записує, що `SendEmail()` був викликаний двічі |
+| **Mock** | Запрограмований з очікуваннями | Очікує, що `Save()` буде викликаний рівно один раз |
+| **Fake** | Робоча реалізація (спрощена) | In-memory база даних замість реальної БД |
 
-In practice, the term **"mock"** is often used loosely to mean any test double. NSubstitute creates substitutes that can act as stubs, mocks, and spies.
+На практиці термін **"мок"** часто використовується вільно для позначення будь-якого тестового дублера. NSubstitute створює замінники, які можуть діяти як стаби, моки та шпигуни.
 
-### 4.3 When to Use Test Doubles
+### 4.3 Коли використовувати тестові дублери
 
-Use test doubles when the dependency:
-- Is **slow** (database, network, file system)
-- Is **non-deterministic** (current time, random numbers, external APIs)
-- Has **side effects** (sending emails, charging credit cards)
-- Is **hard to set up** (complex initialization)
-- **Doesn't exist yet** (team is building it in parallel)
+Використовуйте тестові дублери, коли залежність:
+- **Повільна** (база даних, мережа, файлова система)
+- **Недетерміністична** (поточний час, випадкові числа, зовнішні API)
+- Має **побічні ефекти** (відправка листів, списання з кредитних карт)
+- **Складна у налаштуванні** (складна ініціалізація)
+- **Ще не існує** (команда створює її паралельно)
 
 ---
 
-## 5. Mocking with NSubstitute
+## 5. Мокування з NSubstitute
 
-### 5.1 Why NSubstitute?
+### 5.1 Чому NSubstitute?
 
-NSubstitute uses a **clean, fluent syntax** with no "magic strings" or complex setup:
+NSubstitute використовує **чистий, текучий синтаксис** без "магічних рядків" чи складного налаштування:
 
 ```csharp
-// NSubstitute — clean and readable
+// NSubstitute — чистий та читабельний
 var calculator = Substitute.For<ICalculator>();
 calculator.Add(1, 2).Returns(3);
 
-// Compare with other frameworks (more verbose):
+// Порівняння з іншими фреймворками (більш багатослівні):
 // var mock = new Mock<ICalculator>();
 // mock.Setup(c => c.Add(1, 2)).Returns(3);
 // var calculator = mock.Object;
 ```
 
-### 5.2 Setup
+### 5.2 Налаштування
 
 ```bash
 dotnet add package NSubstitute
@@ -301,25 +301,25 @@ dotnet add package NSubstitute
 using NSubstitute;
 ```
 
-### 5.3 Creating Substitutes
+### 5.3 Створення замінників
 
 ```csharp
-// Create a substitute for an interface
+// Створення замінника для інтерфейсу
 var emailSender = Substitute.For<IEmailSender>();
 
-// Create a substitute for an abstract class
+// Створення замінника для абстрактного класу
 var logger = Substitute.For<AbstractLogger>();
 
-// Create a substitute for multiple interfaces
+// Створення замінника для кількох інтерфейсів
 var combo = Substitute.For<IEmailSender, IDisposable>();
 ```
 
-### 5.4 Full Example: Order Processing Service
+### 5.4 Повний приклад: Сервіс обробки замовлень
 
-#### Production Code
+#### Продакшн-код
 
 ```csharp
-// Interfaces
+// Інтерфейси
 namespace EStore;
 
 public interface IOrderRepository
@@ -351,7 +351,7 @@ public record PaymentResult(bool Success, string TransactionId, string? Error = 
 ```
 
 ```csharp
-// Service under test
+// Сервіс, що тестується
 namespace EStore;
 
 public class OrderProcessingService(
@@ -368,7 +368,7 @@ public class OrderProcessingService(
             throw new InvalidOperationException(
                 $"Order {orderId} is not in Pending status.");
 
-        // Charge payment
+        // Списання оплати
         var payment = await paymentGateway.ChargeAsync(
             order.CardToken, order.Total);
 
@@ -379,11 +379,11 @@ public class OrderProcessingService(
             return new OrderResult(false, $"Payment failed: {payment.Error}");
         }
 
-        // Update order status
+        // Оновлення статусу замовлення
         var paidOrder = order with { Status = OrderStatus.Paid };
         await repository.SaveAsync(paidOrder);
 
-        // Send confirmation email
+        // Відправка підтверджувального листа
         await emailSender.SendOrderConfirmationAsync(
             order.CustomerEmail, order.Id, order.Total);
 
@@ -394,7 +394,7 @@ public class OrderProcessingService(
 public record OrderResult(bool Success, string Message);
 ```
 
-#### Test Class with NSubstitute
+#### Тестовий клас з NSubstitute
 
 ```csharp
 using NSubstitute;
@@ -404,12 +404,12 @@ namespace EStore.Tests;
 
 public class OrderProcessingServiceTests
 {
-    // Dependencies (substitutes)
+    // Залежності (замінники)
     private readonly IOrderRepository _repository;
     private readonly IPaymentGateway _paymentGateway;
     private readonly IEmailSender _emailSender;
 
-    // System under test
+    // Система, що тестується
     private readonly OrderProcessingService _sut;
 
     public OrderProcessingServiceTests()
@@ -422,21 +422,21 @@ public class OrderProcessingServiceTests
             _repository, _paymentGateway, _emailSender);
     }
 
-    // ── Helper ──────────────────────────────────────────
+    // ── Допоміжний метод ─────────────────────────────────
 
     private static Order CreatePendingOrder(int id = 1) =>
         new(id, "customer@example.com", "tok_visa", 99.99m, OrderStatus.Pending);
 
-    // ── Stubbing: Controlling Return Values ─────────────
+    // ── Стабування: Контроль значень, що повертаються ────
 
     [Fact]
     public async Task ProcessOrder_SuccessfulPayment_ReturnSuccessAsync()
     {
-        // Arrange — stub the repository to return a pending order
+        // Arrange — стабуємо репозиторій для повернення очікуючого замовлення
         var order = CreatePendingOrder();
         _repository.GetByIdAsync(1).Returns(order);
 
-        // Stub the payment gateway to succeed
+        // Стабуємо платіжний шлюз на успіх
         _paymentGateway.ChargeAsync("tok_visa", 99.99m)
             .Returns(new PaymentResult(true, "txn_123"));
 
@@ -465,7 +465,7 @@ public class OrderProcessingServiceTests
         result.Message.ShouldContain("Card declined");
     }
 
-    // ── Verifying Calls (Mock Behavior) ─────────────────
+    // ── Перевірка викликів (поведінка моків) ─────────────
 
     [Fact]
     public async Task ProcessOrder_SuccessfulPayment_SendsConfirmationEmailAsync()
@@ -479,7 +479,7 @@ public class OrderProcessingServiceTests
         // Act
         await _sut.ProcessOrderAsync(1);
 
-        // Assert — verify that email was sent with correct parameters
+        // Assert — перевіряємо, що лист відправлено з правильними параметрами
         await _emailSender.Received(1)
             .SendOrderConfirmationAsync("customer@example.com", 1, 99.99m);
     }
@@ -495,7 +495,7 @@ public class OrderProcessingServiceTests
         // Act
         await _sut.ProcessOrderAsync(1);
 
-        // Assert — verify email was NOT sent
+        // Assert — перевіряємо, що лист НЕ був відправлений
         await _emailSender.DidNotReceive()
             .SendOrderConfirmationAsync(
                 Arg.Any<string>(), Arg.Any<int>(), Arg.Any<decimal>());
@@ -512,17 +512,17 @@ public class OrderProcessingServiceTests
         // Act
         await _sut.ProcessOrderAsync(1);
 
-        // Assert — verify the order was saved with Failed status
+        // Assert — перевіряємо, що замовлення збережено зі статусом Failed
         await _repository.Received(1).SaveAsync(
             Arg.Is<Order>(o => o.Status == OrderStatus.Failed));
     }
 
-    // ── Exception Testing ───────────────────────────────
+    // ── Тестування винятків ──────────────────────────────
 
     [Fact]
     public async Task ProcessOrder_OrderNotFound_ThrowsKeyNotFoundExceptionAsync()
     {
-        // Arrange — repository returns null
+        // Arrange — репозиторій повертає null
         _repository.GetByIdAsync(999).Returns((Order?)null);
 
         // Act & Assert
@@ -535,7 +535,7 @@ public class OrderProcessingServiceTests
     [Fact]
     public async Task ProcessOrder_OrderNotPending_ThrowsInvalidOperationAsync()
     {
-        // Arrange — order is already paid
+        // Arrange — замовлення вже оплачене
         var paidOrder = new Order(1, "a@b.com", "tok", 50m, OrderStatus.Paid);
         _repository.GetByIdAsync(1).Returns(paidOrder);
 
@@ -543,7 +543,7 @@ public class OrderProcessingServiceTests
         await Should.ThrowAsync<InvalidOperationException>(
             () => _sut.ProcessOrderAsync(1));
 
-        // Verify no payment was attempted
+        // Перевіряємо, що оплата не була спробована
         await _paymentGateway.DidNotReceive()
             .ChargeAsync(Arg.Any<string>(), Arg.Any<decimal>());
     }
@@ -552,38 +552,38 @@ public class OrderProcessingServiceTests
 
 ---
 
-## 6. NSubstitute Deep Dive
+## 6. Поглиблений розгляд NSubstitute
 
-### 6.1 Argument Matchers
+### 6.1 Зіставлення аргументів
 
-Argument matchers let you set up returns or verify calls regardless of specific argument values:
+Зіставлення аргументів дозволяє налаштовувати повернення або перевіряти виклики незалежно від конкретних значень аргументів:
 
 ```csharp
-// Match any value of a type
+// Зіставлення будь-якого значення типу
 _repository.GetByIdAsync(Arg.Any<int>()).Returns(someOrder);
 
-// Match with a condition
+// Зіставлення з умовою
 _paymentGateway.ChargeAsync(Arg.Any<string>(), Arg.Is<decimal>(d => d > 0))
     .Returns(successResult);
 
-// Match a specific argument for verification
+// Зіставлення конкретного аргументу для перевірки
 await _emailSender.Received()
     .SendOrderConfirmationAsync(
-        Arg.Is<string>(e => e.Contains("@")),  // any valid email
-        Arg.Any<int>(),                         // any order ID
-        Arg.Is<decimal>(t => t > 0));           // positive total
+        Arg.Is<string>(e => e.Contains("@")),  // будь-який валідний email
+        Arg.Any<int>(),                         // будь-який ID замовлення
+        Arg.Is<decimal>(t => t > 0));           // додатна сума
 ```
 
-### 6.2 Returning Multiple Values
+### 6.2 Повернення кількох значень
 
 ```csharp
-// Return different values on consecutive calls
+// Повернення різних значень при послідовних викликах
 _repository.GetByIdAsync(1)
     .Returns(
-        new Order(1, "a@b.com", "tok", 50m, OrderStatus.Pending),   // 1st call
-        new Order(1, "a@b.com", "tok", 50m, OrderStatus.Paid));     // 2nd call
+        new Order(1, "a@b.com", "tok", 50m, OrderStatus.Pending),   // 1-й виклик
+        new Order(1, "a@b.com", "tok", 50m, OrderStatus.Paid));     // 2-й виклик
 
-// Return based on arguments using a function
+// Повернення на основі аргументів за допомогою функції
 _paymentGateway.ChargeAsync(Arg.Any<string>(), Arg.Any<decimal>())
     .Returns(callInfo =>
     {
@@ -594,19 +594,19 @@ _paymentGateway.ChargeAsync(Arg.Any<string>(), Arg.Any<decimal>())
     });
 ```
 
-### 6.3 Throwing Exceptions
+### 6.3 Генерація винятків
 
 ```csharp
-// Simulate infrastructure failures
+// Симуляція збоїв інфраструктури
 _repository.GetByIdAsync(Arg.Any<int>())
     .ThrowsAsync(new TimeoutException("Database connection timed out"));
 
-// Throw on specific conditions
+// Генерація винятку за конкретних умов
 _paymentGateway.ChargeAsync(Arg.Any<string>(), Arg.Is<decimal>(d => d <= 0))
     .ThrowsAsync(new ArgumentException("Amount must be positive"));
 ```
 
-### 6.4 Capturing Arguments with `Arg.Do`
+### 6.4 Захоплення аргументів з `Arg.Do`
 
 ```csharp
 [Fact]
@@ -619,34 +619,34 @@ public async Task ProcessOrder_Success_SavesOrderWithCorrectDataAsync()
     _paymentGateway.ChargeAsync(Arg.Any<string>(), Arg.Any<decimal>())
         .Returns(new PaymentResult(true, "txn_789"));
 
-    // Capture the argument passed to SaveAsync
+    // Захоплення аргументу, переданого до SaveAsync
     await _repository.SaveAsync(Arg.Do<Order>(o => savedOrder = o));
 
     // Act
     await _sut.ProcessOrderAsync(1);
 
-    // Assert — inspect the captured argument
+    // Assert — перевірка захопленого аргументу
     savedOrder.ShouldNotBeNull();
     savedOrder.Status.ShouldBe(OrderStatus.Paid);
     savedOrder.CustomerEmail.ShouldBe("customer@example.com");
 }
 ```
 
-### 6.5 Verifying Call Order and Count
+### 6.5 Перевірка порядку та кількості викликів
 
 ```csharp
-// Verify exact number of calls
+// Перевірка точної кількості викликів
 await _repository.Received(1).SaveAsync(Arg.Any<Order>());
 
-// Verify at least N calls
+// Перевірка щонайменше N викликів
 await _emailSender.Received(Arg.Any<int>())
     .SendOrderConfirmationAsync(Arg.Any<string>(), Arg.Any<int>(), Arg.Any<decimal>());
 
-// Verify no calls were made
+// Перевірка відсутності викликів
 await _paymentGateway.DidNotReceive()
     .ChargeAsync(Arg.Any<string>(), Arg.Any<decimal>());
 
-// Verify call order (NSubstitute 5.x+)
+// Перевірка порядку викликів (NSubstitute 5.x+)
 Received.InOrder(async () =>
 {
     await _paymentGateway.ChargeAsync("tok_visa", 99.99m);
@@ -658,9 +658,9 @@ Received.InOrder(async () =>
 
 ---
 
-## 7. Test Organization and Best Practices
+## 7. Організація тестів та найкращі практики
 
-### 7.1 Project Structure
+### 7.1 Структура проєкту
 
 ```
 src/
@@ -682,73 +682,73 @@ tests/
       OrderTests.cs
 ```
 
-**Convention:** Mirror the source project structure in the test project. Name test files `{ClassName}Tests.cs`.
+**Конвенція:** Дзеркально відтворюйте структуру вихідного проєкту в тестовому проєкті. Називайте тестові файли `{ClassName}Tests.cs`.
 
-### 7.2 Test Class Organization
+### 7.2 Організація тестового класу
 
-Group tests logically within a class:
+Групуйте тести логічно всередині класу:
 
 ```csharp
 public class ShoppingCartTests
 {
-    // ── Adding Items ────────────────────────────────
+    // ── Додавання товарів ────────────────────────────
     [Fact] public void AddItem_ValidProduct_AddsToCart() { ... }
     [Fact] public void AddItem_DuplicateProduct_IncreasesQuantity() { ... }
     [Fact] public void AddItem_InvalidPrice_ThrowsException() { ... }
 
-    // ── Removing Items ──────────────────────────────
+    // ── Видалення товарів ────────────────────────────
     [Fact] public void RemoveItem_ExistingItem_RemovesFromCart() { ... }
     [Fact] public void RemoveItem_NonExistent_ReturnsFalse() { ... }
 
-    // ── Calculating Totals ──────────────────────────
+    // ── Розрахунок підсумків ─────────────────────────
     [Fact] public void GetTotal_MultipleItems_ReturnsSumOfPriceTimesQty() { ... }
     [Fact] public void GetTotal_EmptyCart_ReturnsZero() { ... }
 }
 ```
 
-### 7.3 Common Anti-Patterns
+### 7.3 Поширені антипатерни
 
-| Anti-Pattern | Problem | Fix |
+| Антипатерн | Проблема | Виправлення |
 |---|---|---|
-| **Testing implementation details** | Tests break when refactoring, even if behavior is unchanged | Test public behavior, not private methods |
-| **Over-mocking** | Tests know too much about internal wiring | Only mock direct dependencies |
-| **Shared mutable state** | Tests affect each other | New instance per test (xUnit creates a new class instance per test) |
-| **Flaky tests** | Depend on timing, network, or execution order | Use deterministic inputs, mock time |
-| **Test logic** | `if/else` or loops in tests | Each test should be a straight line |
-| **Magic numbers** | `result.ShouldBe(42)` — where does 42 come from? | Use named constants or computed expected values |
+| **Тестування деталей реалізації** | Тести ламаються при рефакторингу, навіть якщо поведінка не змінилась | Тестуйте публічну поведінку, а не приватні методи |
+| **Надмірне мокування** | Тести знають занадто багато про внутрішню будову | Мокуйте лише прямі залежності |
+| **Спільний змінний стан** | Тести впливають один на одного | Новий екземпляр на тест (xUnit створює новий екземпляр класу на кожен тест) |
+| **Нестабільні тести** | Залежать від часу, мережі або порядку виконання | Використовуйте детерміністичні вхідні дані, мокуйте час |
+| **Логіка в тестах** | `if/else` або цикли в тестах | Кожен тест повинен бути прямою лінією |
+| **Магічні числа** | `result.ShouldBe(42)` — звідки 42? | Використовуйте іменовані константи або обчислені очікувані значення |
 
-### 7.4 What NOT to Mock
+### 7.4 Що НЕ мокувати
 
 ```
-DO mock:                           DO NOT mock:
+МОКУВАТИ:                          НЕ мокувати:
 ─────────                          ────────────
-✓ Repositories / databases         ✗ The class under test
-✓ External APIs / HTTP clients     ✗ Simple value objects (DTOs, records)
-✓ Email / notification services    ✗ Pure functions with no side effects
-✓ Payment gateways                 ✗ Standard library (List, Dictionary)
-✓ File system / clock              ✗ Everything (over-mocking)
+✓ Репозиторії / бази даних         ✗ Клас, що тестується
+✓ Зовнішні API / HTTP-клієнти     ✗ Прості об'єкти-значення (DTO, records)
+✓ Email / сервіси сповіщень       ✗ Чисті функції без побічних ефектів
+✓ Платіжні шлюзи                  ✗ Стандартну бібліотеку (List, Dictionary)
+✓ Файлову систему / годинник      ✗ Все підряд (надмірне мокування)
 ```
 
-**Rule of thumb:** Mock things that are **slow**, **non-deterministic**, or have **side effects**. Don't mock things that are fast and deterministic.
+**Правило:** Мокуйте те, що є **повільним**, **недетерміністичним** або має **побічні ефекти**. Не мокуйте те, що є швидким і детерміністичним.
 
 ---
 
-## 8. Testing Edge Cases
+## 8. Тестування граничних випадків
 
-### 8.1 Common Edge Cases to Consider
+### 8.1 Поширені граничні випадки для розгляду
 
 ```
-Category          Examples
+Категорія         Приклади
 ─────────         ────────
-Null/Empty        null, "", [], 0
-Boundaries        int.MinValue, int.MaxValue, DateTime.MinValue
-Special chars     Unicode, emojis, SQL injection strings, HTML
-Large inputs      Very long strings, huge collections
-Concurrent        Simultaneous access, race conditions
-State             Object used after disposal, double initialization
+Null/Порожнє      null, "", [], 0
+Межі              int.MinValue, int.MaxValue, DateTime.MinValue
+Спецсимволи       Unicode, емодзі, рядки SQL-ін'єкцій, HTML
+Великі вхідні дані Дуже довгі рядки, величезні колекції
+Конкурентність    Одночасний доступ, стани гонки
+Стан              Об'єкт використаний після утилізації, подвійна ініціалізація
 ```
 
-### 8.2 Example: Testing a Password Validator
+### 8.2 Приклад: Тестування валідатора паролів
 
 ```csharp
 public class PasswordValidator
@@ -781,7 +781,7 @@ public class PasswordValidatorTests
 {
     private readonly PasswordValidator _validator = new();
 
-    // ── Valid Passwords ─────────────────────────────
+    // ── Валідні паролі ──────────────────────────────
 
     [Theory]
     [InlineData("Str0ng!Pass")]
@@ -795,7 +795,7 @@ public class PasswordValidatorTests
         result.Errors.ShouldBeEmpty();
     }
 
-    // ── Invalid Passwords ───────────────────────────
+    // ── Невалідні паролі ────────────────────────────
 
     [Theory]
     [InlineData(null)]
@@ -861,13 +861,13 @@ public class PasswordValidatorTests
 
 ---
 
-## 9. Practical Exercise
+## 9. Практична вправа
 
-### Task: Build and Test a `NotificationService`
+### Завдання: Створити та протестувати `NotificationService`
 
-Build a `NotificationService` that sends notifications through different channels based on user preferences.
+Створіть `NotificationService`, який відправляє сповіщення через різні канали залежно від налаштувань користувача.
 
-**Interfaces:**
+**Інтерфейси:**
 
 ```csharp
 public interface IUserPreferenceRepository
@@ -893,50 +893,50 @@ public record UserPreferences(
     string? DeviceToken);
 ```
 
-**Your task:**
-1. Implement `NotificationService.NotifyAsync(int userId, string message)`
-2. Write unit tests using NSubstitute to cover:
-   - User with SMS enabled → SMS is sent
-   - User with Push enabled → push notification is sent
-   - User with both enabled → both are sent
-   - User with neither enabled → nothing is sent, returns appropriate result
-   - SMS fails → appropriate error handling
-   - User not found → throws exception
+**Ваше завдання:**
+1. Реалізувати `NotificationService.NotifyAsync(int userId, string message)`
+2. Написати модульні тести з NSubstitute для покриття:
+   - Користувач з увімкненим SMS → SMS відправлено
+   - Користувач з увімкненим Push → push-сповіщення відправлено
+   - Користувач з обома увімкненими → обидва відправлені
+   - Користувач з обома вимкненими → нічого не відправлено, повертає відповідний результат
+   - SMS не вдалося → відповідна обробка помилок
+   - Користувач не знайдений → генерує виняток
 
-> **Discussion (15 min):** What edge cases should we consider? What happens if the SMS provider is down? Should we retry? Should we send push even if SMS fails?
-
----
-
-## 10. Summary
-
-### Key Takeaways
-
-1. **Unit tests verify isolated behavior** — use test doubles to remove dependencies
-2. **AAA pattern** (Arrange-Act-Assert) gives tests a clear, consistent structure
-3. **`[Fact]`** for single cases, **`[Theory]`** for parameterized tests
-4. **Shouldly** provides readable assertions with clear failure messages
-5. **NSubstitute** is a clean mocking framework:
-   - `.Returns()` to stub values
-   - `.Received()` / `.DidNotReceive()` to verify interactions
-   - `Arg.Any<T>()` and `Arg.Is<T>()` for flexible argument matching
-6. **Mock boundaries, not internals** — mock I/O, external services, and infrastructure
-7. **Test behavior, not implementation** — tests should survive refactoring
-
-### Preview of Next Lecture
-
-In **Lecture 3: Integration Testing with WebApplicationFactory**, we will:
-- Test ASP.NET Core APIs end-to-end using `WebApplicationFactory`
-- Replace services and configuration for testing
-- Test HTTP endpoints, status codes, and response bodies
-- Handle authentication in integration tests
+> **Дискусія (15 хв):** Які граничні випадки варто розглянути? Що відбувається, якщо SMS-провайдер недоступний? Чи потрібно повторювати? Чи слід відправляти push, якщо SMS не вдалося?
 
 ---
 
-## References and Further Reading
+## 10. Підсумок
+
+### Ключові висновки
+
+1. **Модульні тести перевіряють ізольовану поведінку** — використовуйте тестові дублери для видалення залежностей
+2. **Патерн AAA** (Arrange-Act-Assert) надає тестам чітку, послідовну структуру
+3. **`[Fact]`** для окремих випадків, **`[Theory]`** для параметризованих тестів
+4. **Shouldly** забезпечує читабельні перевірки з чіткими повідомленнями про збої
+5. **NSubstitute** — чистий фреймворк мокування:
+   - `.Returns()` для стабування значень
+   - `.Received()` / `.DidNotReceive()` для перевірки взаємодій
+   - `Arg.Any<T>()` та `Arg.Is<T>()` для гнучкого зіставлення аргументів
+6. **Мокуйте межі, а не внутрішні частини** — мокуйте I/O, зовнішні сервіси та інфраструктуру
+7. **Тестуйте поведінку, а не реалізацію** — тести повинні переживати рефакторинг
+
+### Анонс наступної лекції
+
+У **Лекції 3: Інтеграційне тестування з WebApplicationFactory** ми:
+- Тестуватимемо ASP.NET Core API наскрізно з `WebApplicationFactory`
+- Замінюватимемо сервіси та конфігурацію для тестування
+- Тестуватимемо HTTP-ендпоінти, коди стану та тіла відповідей
+- Обробляємо аутентифікацію в інтеграційних тестах
+
+---
+
+## Посилання та додаткова література
 
 - **xUnit v3 Documentation** — https://xunit.net/docs/getting-started/v3/cmdline
 - **Shouldly Documentation** — https://docs.shouldly.org/
 - **NSubstitute Documentation** — https://nsubstitute.github.io/help/getting-started/
 - **"The Art of Unit Testing"** — Roy Osherove (Manning, 3rd edition, 2024)
 - **"Unit Testing Principles, Practices, and Patterns"** — Vladimir Khorikov (Manning, 2020)
-- **ISTQB Foundation Level Syllabus** (v4.0, 2023) — Chapter 2
+- **ISTQB Foundation Level Syllabus** (v4.0, 2023) — Розділ 2

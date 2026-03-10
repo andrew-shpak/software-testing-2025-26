@@ -1,82 +1,82 @@
-# Lab 11 — Services Testing: End-to-End
+# Лабораторна 11 — Тестування сервісів: наскрізне тестування (End-to-End)
 
-## Objective
+## Мета
 
-Write end-to-end tests that verify complete user workflows through a web application, covering UI interactions, navigation, form submissions, and API calls.
+Написати наскрізні тести, які перевіряють повні користувацькі сценарії у веб-застосунку, включаючи взаємодію з інтерфейсом, навігацію, відправку форм та API-запити.
 
-**Duration:** 60 minutes
+**Тривалість:** 60 хвилин
 
-## Prerequisites
+## Передумови
 
-Before starting this lab, make sure you have:
+Перед початком цієї лабораторної переконайтеся, що у вас є:
 
-- .NET 10 SDK (or later) installed
-- Familiarity with ASP.NET Core Razor Pages or MVC
-- Completed previous labs on unit and integration testing
-- Basic understanding of HTML forms, CSS selectors, and DOM structure
-- PowerShell (for the Playwright browser installation script)
+- Встановлений .NET 10 SDK (або новіший)
+- Знайомство з ASP.NET Core Razor Pages або MVC
+- Виконані попередні лабораторні з модульного та інтеграційного тестування
+- Базове розуміння HTML-форм, CSS-селекторів та структури DOM
+- PowerShell (для скрипта встановлення браузерів Playwright)
 
-After adding the `Microsoft.Playwright` NuGet package, you must install the browser binaries:
+Після додавання NuGet-пакета `Microsoft.Playwright` необхідно встановити бінарні файли браузерів:
 
 ```bash
-# Build the test project first so the playwright.ps1 script is available
+# Спочатку зберіть тестовий проект, щоб скрипт playwright.ps1 став доступним
 dotnet build Lab11.Tests
 
-# Install browsers (Chromium, Firefox, WebKit)
+# Встановіть браузери (Chromium, Firefox, WebKit)
 pwsh Lab11.Tests/bin/Debug/net10.0/playwright.ps1 install
 ```
 
-> **Note:** On CI environments you may also need to install system dependencies. Run `pwsh playwright.ps1 install-deps` to install required OS-level libraries.
+> **Примітка:** У CI-середовищах вам також може знадобитися встановити системні залежності. Виконайте `pwsh playwright.ps1 install-deps`, щоб встановити необхідні бібліотеки на рівні ОС.
 
-## Key Concepts
+## Ключові поняття
 
-### What Are End-to-End Tests?
+### Що таке наскрізні тести?
 
-End-to-end (E2E) tests validate the entire application stack by simulating real user behavior in a browser. They interact with the UI exactly as a user would: clicking buttons, filling forms, navigating pages, and verifying the results on screen.
+Наскрізні (E2E) тести перевіряють весь стек застосунку, імітуючи реальну поведінку користувача у браузері. Вони взаємодіють з інтерфейсом саме так, як це робив би користувач: натискають кнопки, заповнюють форми, переходять між сторінками та перевіряють результати на екрані.
 
-### The Testing Pyramid and E2E Tests
+### Піраміда тестування та E2E-тести
 
 ```
-        /  E2E  \        <-- Few, slow, high confidence
+        /  E2E  \        <-- Мало, повільні, висока впевненість
        /----------\
-      / Integration \    <-- Some, moderate speed
+      / Інтеграційні \    <-- Помірна кількість, середня швидкість
      /----------------\
-    /    Unit Tests     \ <-- Many, fast, isolated
+    /  Модульні тести   \ <-- Багато, швидкі, ізольовані
    /--------------------\
 ```
 
-E2E tests sit at the top of the testing pyramid. They are:
-- **Slowest** to run (real browser, real rendering)
-- **Most realistic** (closest to actual user experience)
-- **Most brittle** (sensitive to UI changes, timing issues)
-- **Most valuable** for catching integration issues across the full stack
+E2E-тести знаходяться на вершині піраміди тестування. Вони:
+- **Найповільніші** у виконанні (реальний браузер, реальний рендеринг)
+- **Найреалістичніші** (найближче до реального користувацького досвіду)
+- **Найкрихкіші** (чутливі до змін інтерфейсу, проблем із таймінгом)
+- **Найцінніші** для виявлення інтеграційних проблем у всьому стеку
 
-Use them sparingly for critical user journeys.
+Використовуйте їх помірно для критичних користувацьких сценаріїв.
 
-### Why Playwright?
+### Чому Playwright?
 
-Playwright is a modern browser automation library that addresses many pain points of earlier tools (Selenium, Puppeteer):
+Playwright — це сучасна бібліотека автоматизації браузерів, яка вирішує багато проблем попередніх інструментів (Selenium, Puppeteer):
 
-| Feature | Playwright | Selenium |
+| Функція | Playwright | Selenium |
 |---------|-----------|----------|
-| Auto-waiting | Built-in (waits for elements to be actionable) | Manual waits required |
-| Browser support | Chromium, Firefox, WebKit | All major browsers via drivers |
-| Speed | Fast (direct protocol communication) | Slower (WebDriver protocol) |
-| .NET support | First-class (`Microsoft.Playwright`) | Via `Selenium.WebDriver` |
-| Debugging | Trace viewer, codegen, inspector | Limited built-in tools |
+| Автоочікування | Вбудоване (чекає, поки елементи стануть доступними для дій) | Потрібні ручні очікування |
+| Підтримка браузерів | Chromium, Firefox, WebKit | Усі основні браузери через драйвери |
+| Швидкість | Швидкий (пряма комунікація через протокол) | Повільніший (протокол WebDriver) |
+| Підтримка .NET | Першокласна (`Microsoft.Playwright`) | Через `Selenium.WebDriver` |
+| Налагодження | Переглядач трасувань, codegen, інспектор | Обмежені вбудовані інструменти |
 
-### The Page Object Model (POM)
+### Шаблон Page Object Model (POM)
 
-The Page Object Model is a design pattern that creates an abstraction layer over raw page interactions. Each page (or component) of your application gets its own class that encapsulates selectors and actions.
+Page Object Model — це шаблон проектування, який створює рівень абстракції над безпосередніми взаємодіями зі сторінкою. Кожна сторінка (або компонент) вашого застосунку отримує власний клас, який інкапсулює селектори та дії.
 
-**Without POM** (fragile, duplicated selectors):
+**Без POM** (крихкий, дубльовані селектори):
 ```csharp
 await page.FillAsync("#Title", "My Task");
 await page.FillAsync("#Description", "Details");
 await page.ClickAsync("input[type='submit']");
 ```
 
-**With POM** (maintainable, reusable):
+**З POM** (підтримуваний, багаторазовий):
 ```csharp
 var createPage = new TaskCreatePage(page);
 await createPage.FillTitle("My Task");
@@ -84,16 +84,16 @@ await createPage.FillDescription("Details");
 await createPage.Submit();
 ```
 
-If a selector changes, you fix it in one place rather than across dozens of tests.
+Якщо селектор змінюється, ви виправляєте його в одному місці, а не в десятках тестів.
 
-## Tools
+## Інструменти
 
-- Language: C#
-- E2E Framework: [Playwright for .NET](https://playwright.dev/dotnet/)
-- Framework: [xUnit v3](https://xunit.net/) (`xunit.v3`)
-- App Under Test: ASP.NET Core MVC or Razor Pages application
+- Мова: C#
+- E2E-фреймворк: [Playwright for .NET](https://playwright.dev/dotnet/)
+- Тестовий фреймворк: [xUnit v3](https://xunit.net/) (`xunit.v3`)
+- Тестований застосунок: ASP.NET Core MVC або Razor Pages
 
-## Setup
+## Налаштування
 
 ```bash
 dotnet new sln -n Lab11
@@ -106,24 +106,24 @@ dotnet add Lab11.Tests package Microsoft.NET.Test.Sdk
 dotnet add Lab11.Tests package Microsoft.Playwright
 dotnet add Lab11.Tests package Shouldly
 
-# Install Playwright browsers
+# Встановіть браузери Playwright
 pwsh Lab11.Tests/bin/Debug/net10.0/playwright.ps1 install
 ```
 
-## Tasks
+## Завдання
 
-### Task 1 — Build the Application Under Test
+### Завдання 1 — Створення тестованого застосунку
 
-Create a simple task management web app with Razor Pages:
+Створіть простий веб-застосунок для управління завданнями з Razor Pages:
 
-- `/` — Home page with list of tasks
-- `/Tasks/Create` — Form to create a new task (Title, Description, DueDate, Priority)
-- `/Tasks/Edit/{id}` — Form to edit a task
-- `/Tasks/Details/{id}` — Task details page
-- `/Tasks/Delete/{id}` — Delete confirmation page
-- Include form validation (required fields, date format)
+- `/` — Головна сторінка зі списком завдань
+- `/Tasks/Create` — Форма створення нового завдання (Title, Description, DueDate, Priority)
+- `/Tasks/Edit/{id}` — Форма редагування завдання
+- `/Tasks/Details/{id}` — Сторінка деталей завдання
+- `/Tasks/Delete/{id}` — Сторінка підтвердження видалення
+- Включіть валідацію форм (обов'язкові поля, формат дати)
 
-#### Example Task Model
+#### Приклад моделі завдання
 
 ```csharp
 public class TaskItem
@@ -153,36 +153,36 @@ public enum Priority
 }
 ```
 
-> **Hint:** Use an in-memory list or EF Core InMemory provider for storage. The goal is the tests, not a production database. Keep the app simple.
+> **Підказка:** Використовуйте список у пам'яті або EF Core InMemory провайдер для зберігання. Мета — тести, а не продуктивна база даних. Тримайте застосунок простим.
 
-### Task 2 — Playwright E2E Tests
+### Завдання 2 — Наскрізні тести з Playwright
 
-Write E2E tests covering full user workflows:
+Напишіть E2E-тести, що охоплюють повні користувацькі сценарії:
 
-1. **Create task workflow**:
-   - Navigate to home page
-   - Click "Create New Task"
-   - Fill in the form fields
-   - Submit the form
-   - Verify redirect to task list
-   - Verify new task appears in the list
+1. **Сценарій створення завдання**:
+   - Перейдіть на головну сторінку
+   - Натисніть "Create New Task"
+   - Заповніть поля форми
+   - Відправте форму
+   - Перевірте перенаправлення на список завдань
+   - Перевірте, що нове завдання з'явилося у списку
 
-2. **Edit task workflow**:
-   - Navigate to task details
-   - Click "Edit"
-   - Modify fields
-   - Save changes
-   - Verify changes are persisted
+2. **Сценарій редагування завдання**:
+   - Перейдіть до деталей завдання
+   - Натисніть "Edit"
+   - Змініть поля
+   - Збережіть зміни
+   - Перевірте, що зміни збережено
 
-3. **Validation workflow**:
-   - Try to submit empty form
-   - Verify validation messages appear
-   - Fill required fields one by one
-   - Verify validation messages disappear
+3. **Сценарій валідації**:
+   - Спробуйте відправити порожню форму
+   - Перевірте, що з'являються повідомлення про помилки валідації
+   - Заповнюйте обов'язкові поля по одному
+   - Перевірте, що повідомлення про помилки зникають
 
-#### Starting the App for Tests
+#### Запуск застосунку для тестів
 
-You need to launch the web application before running Playwright against it. One approach is to start the app in the test fixture:
+Потрібно запустити веб-застосунок перед виконанням Playwright-тестів. Один із підходів — запустити застосунок у тестовому фікстурі:
 
 ```csharp
 public class WebAppFixture : IAsyncLifetime
@@ -192,11 +192,11 @@ public class WebAppFixture : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        // Build and start the web application
+        // Збірка та запуск веб-застосунку
         var builder = WebApplication.CreateBuilder(new[] { "--urls", "http://localhost:5180" });
-        // ... configure services ...
+        // ... налаштування сервісів ...
         _app = builder.Build();
-        // ... configure middleware ...
+        // ... налаштування middleware ...
         await _app.StartAsync();
         BaseUrl = "http://localhost:5180";
     }
@@ -209,7 +209,7 @@ public class WebAppFixture : IAsyncLifetime
 }
 ```
 
-#### Example E2E Test
+#### Приклад E2E-тесту
 
 ```csharp
 public class TaskWorkflowTests : IClassFixture<WebAppFixture>, IAsyncLifetime
@@ -241,20 +241,20 @@ public class TaskWorkflowTests : IClassFixture<WebAppFixture>, IAsyncLifetime
     [Fact]
     public async Task CreateTask_WithValidData_ShouldAppearInListAsync()
     {
-        // Navigate to home page
+        // Перехід на головну сторінку
         await _page.GotoAsync(_fixture.BaseUrl);
         await _page.GetByRole(AriaRole.Link, new() { Name = "Create New Task" }).ClickAsync();
 
-        // Fill the form
+        // Заповнення форми
         await _page.GetByLabel("Title").FillAsync("Buy groceries");
         await _page.GetByLabel("Description").FillAsync("Milk, eggs, bread");
         await _page.GetByLabel("Due Date").FillAsync("2026-03-01");
         await _page.GetByLabel("Priority").SelectOptionAsync("High");
 
-        // Submit
+        // Відправка
         await _page.GetByRole(AriaRole.Button, new() { Name = "Create" }).ClickAsync();
 
-        // Verify redirect and task in list
+        // Перевірка перенаправлення та наявності завдання у списку
         await _page.WaitForURLAsync($"{_fixture.BaseUrl}/**");
         var taskInList = _page.GetByText("Buy groceries");
         await Expect(taskInList).ToBeVisibleAsync();
@@ -265,31 +265,31 @@ public class TaskWorkflowTests : IClassFixture<WebAppFixture>, IAsyncLifetime
     {
         await _page.GotoAsync($"{_fixture.BaseUrl}/Tasks/Create");
 
-        // Submit without filling required fields
+        // Відправка без заповнення обов'язкових полів
         await _page.GetByRole(AriaRole.Button, new() { Name = "Create" }).ClickAsync();
 
-        // Validation message should appear
+        // Повинно з'явитися повідомлення про помилку валідації
         var validationMessage = _page.GetByText("The Title field is required");
         await Expect(validationMessage).ToBeVisibleAsync();
     }
 }
 ```
 
-> **Hint:** Playwright has built-in auto-waiting. Methods like `ClickAsync`, `FillAsync`, and `GetByRole` automatically wait for elements to become actionable. You rarely need explicit `Task.Delay` or `WaitForTimeout` calls. If you find yourself adding manual delays, reconsider your approach -- use `WaitForURLAsync`, `WaitForSelectorAsync`, or Playwright's `Expect` assertions instead.
+> **Підказка:** Playwright має вбудоване автоочікування. Методи `ClickAsync`, `FillAsync` та `GetByRole` автоматично чекають, поки елементи стануть доступними для дій. Вам рідко потрібні явні виклики `Task.Delay` або `WaitForTimeout`. Якщо ви додаєте ручні затримки, перегляньте свій підхід — використовуйте `WaitForURLAsync`, `WaitForSelectorAsync` або assertion-и Playwright через `Expect`.
 
-#### Expected Behavior Summary
+#### Зведена таблиця очікуваної поведінки
 
-| Workflow | Steps | Expected Outcome |
-|----------|-------|-----------------|
-| Create task | Fill form, submit | Task appears in list, redirect to index |
-| Create empty task | Submit empty form | Validation messages shown, no redirect |
-| Edit task | Change fields, save | Updated values visible on details page |
-| Delete task | Confirm deletion | Task removed from list |
-| Navigation | Click links | Correct pages load, titles match |
+| Сценарій | Кроки | Очікуваний результат |
+|----------|-------|---------------------|
+| Створення завдання | Заповнити форму, відправити | Завдання з'являється у списку, перенаправлення на головну |
+| Створення порожнього завдання | Відправити порожню форму | Показані повідомлення валідації, без перенаправлення |
+| Редагування завдання | Змінити поля, зберегти | Оновлені значення видно на сторінці деталей |
+| Видалення завдання | Підтвердити видалення | Завдання видалено зі списку |
+| Навігація | Натиснути посилання | Завантажуються правильні сторінки, заголовки відповідають |
 
-### Task 3 — Advanced E2E Patterns
+### Завдання 3 — Розширені шаблони E2E
 
-Implement the **Page Object Model** — create page classes for each page:
+Реалізуйте **Page Object Model** — створіть класи сторінок для кожної сторінки:
 
 ```csharp
 public class TaskListPage
@@ -301,9 +301,9 @@ public class TaskListPage
 }
 ```
 
-Refactor your Task 2 tests to use these page objects instead of raw selectors.
+Рефакторіть ваші тести із Завдання 2, щоб використовувати ці об'єкти сторінок замість безпосередніх селекторів.
 
-#### Page Object Model Example
+#### Приклад Page Object Model
 
 ```csharp
 public class TaskListPage
@@ -362,12 +362,12 @@ public class TaskCreatePage
 }
 ```
 
-#### Screenshot on Failure Pattern
+#### Шаблон створення скріншота при невдачі
 
 ```csharp
 public async Task DisposeAsync()
 {
-    // Capture screenshot if test failed (check via test context or try-catch)
+    // Захоплення скріншота, якщо тест провалився (перевірка через контекст тесту або try-catch)
     if (TestContext.Current.TestState == TestState.Failed)
     {
         var screenshotPath = Path.Combine("screenshots",
@@ -379,32 +379,32 @@ public async Task DisposeAsync()
 }
 ```
 
-> **Hint:** Create a `screenshots/` directory in your test project and add it to `.gitignore`. Screenshots are for local debugging and CI artifacts, not for committing to the repository.
+> **Підказка:** Створіть директорію `screenshots/` у вашому тестовому проекті та додайте її до `.gitignore`. Скріншоти призначені для локального налагодження та CI-артефактів, а не для комітів у репозиторій.
 
-## Grading
+## Оцінювання
 
-| Criteria |
+| Критерії |
 |----------|
-| Task 1 — Web application |
-| Task 2 — E2E workflow tests |
-| Task 3 — Page Object Model and patterns |
-| Test stability (no flaky tests) |
+| Завдання 1 — Веб-застосунок |
+| Завдання 2 — Наскрізні тести сценаріїв |
+| Завдання 3 — Page Object Model та шаблони |
+| Стабільність тестів (без нестабільних тестів) |
 
-## Submission
+## Здача роботи
 
-- Solution with `Lab11.WebApp` and `Lab11.Tests` projects
-- Page Object classes in `Lab11.Tests/Pages/`
-- Screenshots directory for failure captures
+- Рішення з проектами `Lab11.WebApp` та `Lab11.Tests`
+- Класи Page Object у `Lab11.Tests/Pages/`
+- Директорія для скріншотів при невдачах
 
-## References
+## Посилання
 
-- [Playwright for .NET Documentation](https://playwright.dev/dotnet/docs/intro) -- official getting started guide
-- [Playwright .NET API Reference](https://playwright.dev/dotnet/docs/api/class-playwright) -- full API documentation
-- [Playwright Locators Guide](https://playwright.dev/dotnet/docs/locators) -- best practices for finding elements
-- [Playwright Auto-Waiting](https://playwright.dev/dotnet/docs/actionability) -- understanding how auto-wait works
-- [Playwright Trace Viewer](https://playwright.dev/dotnet/docs/trace-viewer-intro) -- post-mortem debugging tool for CI failures
-- [Page Object Model Pattern](https://playwright.dev/dotnet/docs/pom) -- Playwright's guide to POM
-- [ASP.NET Core Razor Pages Tutorial](https://learn.microsoft.com/en-us/aspnet/core/tutorials/razor-pages/) -- for building the app under test
-- [xUnit v3 Documentation](https://xunit.net/docs/getting-started/v3/cmdline) -- test framework reference
-- [Shouldly Assertion Library](https://docs.shouldly.org/) -- assertion library used in this lab
-- [Martin Fowler: Page Object Pattern](https://martinfowler.com/bliki/PageObject.html) -- design pattern origin
+- [Документація Playwright для .NET](https://playwright.dev/dotnet/docs/intro) -- офіційний посібник для початку роботи
+- [Довідник API Playwright .NET](https://playwright.dev/dotnet/docs/api/class-playwright) -- повна документація API
+- [Посібник з локаторів Playwright](https://playwright.dev/dotnet/docs/locators) -- найкращі практики пошуку елементів
+- [Автоочікування Playwright](https://playwright.dev/dotnet/docs/actionability) -- розуміння роботи автоочікування
+- [Переглядач трасувань Playwright](https://playwright.dev/dotnet/docs/trace-viewer-intro) -- інструмент посмертного налагодження для CI-помилок
+- [Шаблон Page Object Model](https://playwright.dev/dotnet/docs/pom) -- посібник Playwright з POM
+- [Підручник з ASP.NET Core Razor Pages](https://learn.microsoft.com/en-us/aspnet/core/tutorials/razor-pages/) -- для створення тестованого застосунку
+- [Документація xUnit v3](https://xunit.net/docs/getting-started/v3/cmdline) -- довідник тестового фреймворку
+- [Бібліотека assertion-ів Shouldly](https://docs.shouldly.org/) -- бібліотека assertion-ів, що використовується у цій лабораторній
+- [Мартін Фаулер: Шаблон Page Object](https://martinfowler.com/bliki/PageObject.html) -- походження шаблону проектування

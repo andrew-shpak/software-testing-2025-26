@@ -1,121 +1,121 @@
-# Lecture 3: Integration Testing with WebApplicationFactory
+# Лекція 3: Інтеграційне тестування з WebApplicationFactory
 
-## Learning Objectives
+## Навчальні цілі
 
-By the end of this lecture, students will be able to:
+Після завершення цієї лекції студенти зможуть:
 
-- Explain the difference between unit testing and integration testing
-- Describe how ASP.NET Core test infrastructure works internally
-- Use `WebApplicationFactory<T>` to spin up an in-memory test server
-- Create custom `WebApplicationFactory` subclasses with service overrides
-- Test HTTP endpoints (GET, POST, PUT, DELETE) with proper assertions
-- Replace and reconfigure services in the DI container for testing
-- Test middleware, authentication, and authorization pipelines
-- Apply `IClassFixture<T>` and `IAsyncLifetime` for test lifecycle management
-- Identify common pitfalls and apply best practices for integration tests
+- Пояснити різницю між модульним та інтеграційним тестуванням
+- Описати, як працює тестова інфраструктура ASP.NET Core внутрішньо
+- Використовувати `WebApplicationFactory<T>` для запуску in-memory тестового сервера
+- Створювати власні підкласи `WebApplicationFactory` із заміною сервісів
+- Тестувати HTTP-ендпоінти (GET, POST, PUT, DELETE) з належними перевірками
+- Замінювати та переналаштовувати сервіси в DI-контейнері для тестування
+- Тестувати middleware, автентифікацію та авторизацію
+- Застосовувати `IClassFixture<T>` та `IAsyncLifetime` для управління життєвим циклом тестів
+- Визначати поширені помилки та застосовувати найкращі практики інтеграційних тестів
 
 ---
 
-## 1. Unit Testing vs. Integration Testing: A Brief Recap
+## 1. Модульне тестування vs. Інтеграційне тестування: Короткий підсумок
 
-### 1.1 Where Unit Tests End
+### 1.1 Де закінчуються модульні тести
 
-In Lecture 2, we learned that unit tests verify a single class or method **in isolation**, replacing all dependencies with test doubles. This is powerful — but it has a blind spot:
+У Лекції 2 ми дізнались, що модульні тести перевіряють окремий клас або метод **ізольовано**, замінюючи всі залежності тестовими дублерами. Це потужно, але має сліпу зону:
 
 ```
-Unit Tests Verify:                    Unit Tests Do NOT Verify:
-──────────────────                    ────────────────────────
-✓ Business logic in isolation         ✗ HTTP routing and model binding
-✓ Input validation rules              ✗ Middleware pipeline (auth, CORS, etc.)
-✓ Edge cases and error handling       ✗ Dependency injection wiring
-✓ Algorithm correctness               ✗ JSON serialization/deserialization
-                                      ✗ Database queries (real SQL)
-                                      ✗ Multiple components working together
+Модульні тести перевіряють:          Модульні тести НЕ перевіряють:
+──────────────────────               ──────────────────────────────
+✓ Бізнес-логіку ізольовано           ✗ HTTP-маршрутизацію та прив'язку моделей
+✓ Правила валідації вводу            ✗ Конвеєр middleware (auth, CORS тощо)
+✓ Граничні випадки та обробку помилок ✗ Підключення dependency injection
+✓ Коректність алгоритмів            ✗ JSON серіалізацію/десеріалізацію
+                                     ✗ Запити до бази даних (реальний SQL)
+                                     ✗ Спільну роботу кількох компонентів
 ```
 
-### 1.2 What Integration Tests Cover
+### 1.2 Що покривають інтеграційні тести
 
-**Integration tests** verify that multiple components work **together** correctly. They test the seams between components — the places where misunderstandings and misconfiguration hide.
+**Інтеграційні тести** перевіряють, що кілька компонентів працюють **разом** коректно. Вони тестують з'єднання між компонентами — місця, де ховаються непорозуміння та помилки конфігурації.
 
 ```
 ┌───────────────────────────────────────────────────────────┐
-│                   Integration Test                        │
+│                   Інтеграційний тест                      │
 │                                                           │
-│  HTTP Request ──► Routing ──► Middleware ──► Controller   │
+│  HTTP-запит ──► Маршрутизація ──► Middleware ──► Контролер │
 │                                                  │        │
-│                                             Service Layer │
+│                                             Шар сервісів  │
 │                                                  │        │
-│  HTTP Response ◄── Serialization ◄── Result ◄────┘        │
+│  HTTP-відповідь ◄── Серіалізація ◄── Результат ◄─┘        │
 │                                                           │
-│  Verifies: status codes, headers, response body,          │
-│            DI wiring, middleware behavior, routing         │
+│  Перевіряє: коди стану, заголовки, тіло відповіді,        │
+│             підключення DI, поведінку middleware, маршрути │
 └───────────────────────────────────────────────────────────┘
 ```
 
-### 1.3 The Testing Pyramid
+### 1.3 Піраміда тестування
 
 ```
             ╱╲
-           ╱  ╲         E2E / UI Tests
-          ╱    ╲        (few, slow, brittle)
+           ╱  ╲         E2E / UI тести
+          ╱    ╲        (мало, повільні, крихкі)
          ╱──────╲
-        ╱        ╲      Integration Tests        ◄── THIS LECTURE
-       ╱          ╲     (moderate number, medium speed)
+        ╱        ╲      Інтеграційні тести        ◄── ЦЯ ЛЕКЦІЯ
+       ╱          ╲     (помірна кількість, середня швидкість)
       ╱────────────╲
-     ╱              ╲   Unit Tests
-    ╱                ╲  (many, fast, isolated)
+     ╱              ╲   Модульні тести
+    ╱                ╲  (багато, швидкі, ізольовані)
    ╱──────────────────╲
 ```
 
-| Aspect | Unit Tests | Integration Tests | E2E Tests |
+| Аспект | Модульні тести | Інтеграційні тести | E2E тести |
 |---|---|---|---|
-| **Scope** | Single class/method | Multiple components | Full system |
-| **Speed** | Milliseconds | Milliseconds to seconds | Seconds to minutes |
-| **Dependencies** | All mocked | Some real, some mocked | All real |
-| **Confidence** | Logic is correct | Components work together | System works for users |
-| **Maintenance** | Low | Medium | High |
+| **Обсяг** | Один клас/метод | Кілька компонентів | Вся система |
+| **Швидкість** | Мілісекунди | Мілісекунди-секунди | Секунди-хвилини |
+| **Залежності** | Всі замоковані | Деякі реальні, деякі замоковані | Всі реальні |
+| **Впевненість** | Логіка коректна | Компоненти працюють разом | Система працює для користувачів |
+| **Обслуговування** | Низьке | Середнє | Високе |
 
-> **Discussion (5 min):** You have 100% unit test coverage, but your API returns 500 errors in production. How is this possible? What could integration tests have caught?
+> **Дискусія (5 хв):** У вас 100% покриття модульними тестами, але API повертає помилки 500 у продакшні. Як це можливо? Що могли б виявити інтеграційні тести?
 
 ---
 
-## 2. ASP.NET Core Test Infrastructure Overview
+## 2. Огляд тестової інфраструктури ASP.NET Core
 
-### 2.1 The Problem: How Do You Test a Web API?
+### 2.1 Проблема: Як тестувати Web API?
 
-Testing an ASP.NET Core API without deploying it to a real server was historically painful. You had to:
+Тестування ASP.NET Core API без розгортання на реальному сервері було історично болісним. Потрібно було:
 
-1. Build and publish the application
-2. Start it on a port
-3. Send real HTTP requests
-4. Tear it down after tests
+1. Зібрати та опублікувати додаток
+2. Запустити його на порту
+3. Відправити реальні HTTP-запити
+4. Зупинити після тестів
 
-This is slow, flaky, and hard to automate.
+Це повільно, нестабільно та важко автоматизувати.
 
-### 2.2 The Solution: `Microsoft.AspNetCore.Mvc.Testing`
+### 2.2 Рішення: `Microsoft.AspNetCore.Mvc.Testing`
 
-ASP.NET Core provides a **built-in test infrastructure** via the `Microsoft.AspNetCore.Mvc.Testing` NuGet package. The centerpiece is `WebApplicationFactory<TEntryPoint>`.
+ASP.NET Core надає **вбудовану тестову інфраструктуру** через NuGet-пакет `Microsoft.AspNetCore.Mvc.Testing`. Центральним елементом є `WebApplicationFactory<TEntryPoint>`.
 
 ```bash
 dotnet add package Microsoft.AspNetCore.Mvc.Testing
 ```
 
-### 2.3 Architecture Overview
+### 2.3 Огляд архітектури
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  Test Process (single process, no network)                  │
+│  Тестовий процес (один процес, без мережі)                  │
 │                                                             │
 │  ┌──────────────┐         ┌──────────────────────────────┐  │
-│  │  Test Class   │         │  TestServer                  │  │
-│  │              │  HTTP    │  ┌────────────────────────┐  │  │
-│  │  HttpClient ─┼────────►│  │  ASP.NET Core Pipeline  │  │  │
+│  │  Тестовий     │         │  TestServer                  │  │
+│  │  клас         │  HTTP   │  ┌────────────────────────┐  │  │
+│  │  HttpClient ─┼────────►│  │  Конвеєр ASP.NET Core  │  │  │
 │  │              │ in-mem   │  │  ┌──────────────────┐  │  │  │
-│  │  Assertions  │◄────────┼  │  │  Middleware       │  │  │  │
+│  │  Перевірки   │◄────────┼  │  │  Middleware       │  │  │  │
 │  │              │         │  │  │  ┌──────────────┐ │  │  │  │
-│  └──────────────┘         │  │  │  │  Controllers │ │  │  │  │
+│  └──────────────┘         │  │  │  │ Контролери  │ │  │  │  │
 │                           │  │  │  │  ┌────────┐ │ │  │  │  │
-│                           │  │  │  │  │Services│ │ │  │  │  │
+│                           │  │  │  │  │Сервіси │ │ │  │  │  │
 │                           │  │  │  │  └────────┘ │ │  │  │  │
 │                           │  │  │  └──────────────┘ │  │  │  │
 │                           │  │  └──────────────────┘  │  │  │
@@ -124,46 +124,46 @@ dotnet add package Microsoft.AspNetCore.Mvc.Testing
 └─────────────────────────────────────────────────────────────┘
 ```
 
-Key points:
+Ключові моменти:
 
-- **No real HTTP traffic** — requests go through an in-memory channel
-- **No open ports** — no port conflicts, no firewall issues
-- **Same pipeline** — middleware, routing, model binding, filters all execute
-- **Fast** — no network latency, no process startup overhead
-- **Single process** — test and server run in the same process
+- **Без реального HTTP-трафіку** — запити проходять через in-memory канал
+- **Без відкритих портів** — без конфліктів портів, без проблем з брандмауером
+- **Той самий конвеєр** — middleware, маршрутизація, прив'язка моделей, фільтри — все виконується
+- **Швидко** — без мережевої затримки, без витрат на запуск процесу
+- **Один процес** — тест і сервер працюють в одному процесі
 
 ---
 
-## 3. WebApplicationFactory Deep Dive
+## 3. Детальний розгляд WebApplicationFactory
 
-### 3.1 What Happens When You Create a WebApplicationFactory?
+### 3.1 Що відбувається при створенні WebApplicationFactory?
 
-`WebApplicationFactory<TEntryPoint>` does the following internally:
+`WebApplicationFactory<TEntryPoint>` внутрішньо виконує наступне:
 
 ```
-1. Locates the application's entry point assembly
-   └── Uses TEntryPoint to find the project's content root
+1. Знаходить збірку точки входу додатку
+   └── Використовує TEntryPoint для пошуку кореневої директорії проєкту
 
-2. Builds the host
-   └── Calls Program.cs / Startup.cs to configure services and middleware
-   └── BUT uses TestServer instead of Kestrel
+2. Будує хост
+   └── Викликає Program.cs / Startup.cs для конфігурації сервісів та middleware
+   └── АЛЕ використовує TestServer замість Kestrel
 
-3. Creates a TestServer
-   └── In-memory server that processes requests without TCP/IP
-   └── Implements IServer interface
+3. Створює TestServer
+   └── In-memory сервер, що обробляє запити без TCP/IP
+   └── Реалізує інтерфейс IServer
 
-4. Provides HttpClient
-   └── CreateClient() returns an HttpClient configured to talk to TestServer
-   └── Base address is set to http://localhost by default
+4. Надає HttpClient
+   └── CreateClient() повертає HttpClient, налаштований для роботи з TestServer
+   └── Базова адреса за замовчуванням http://localhost
 
-5. Manages lifecycle
-   └── Implements IDisposable / IAsyncDisposable
-   └── Shuts down the host and server on disposal
+5. Керує життєвим циклом
+   └── Реалізує IDisposable / IAsyncDisposable
+   └── Зупиняє хост та сервер при утилізації
 ```
 
-### 3.2 The Simplest Integration Test
+### 3.2 Найпростіший інтеграційний тест
 
-Let us start with a minimal example. Assume we have a simple ASP.NET Core API:
+Почнемо з мінімального прикладу. Припустимо, у нас є простий ASP.NET Core API:
 
 ```csharp
 // Program.cs
@@ -178,7 +178,7 @@ var app = builder.Build();
 app.MapControllers();
 app.Run();
 
-// Make Program class accessible to test project
+// Зробити клас Program доступним для тестового проєкту
 public partial class Program { }
 ```
 
@@ -233,7 +233,7 @@ public class TasksController(ITaskService taskService) : ControllerBase
 ```
 
 ```csharp
-// Models
+// Моделі
 namespace TaskApi;
 
 public record TaskItem(int Id, string Title, string? Description, bool IsCompleted);
@@ -241,7 +241,7 @@ public record CreateTaskRequest(string Title, string? Description);
 public record UpdateTaskRequest(string Title, string? Description, bool IsCompleted);
 ```
 
-Now the integration test:
+Тепер інтеграційний тест:
 
 ```csharp
 // TaskApi.Tests/TasksControllerTests.cs
@@ -283,55 +283,55 @@ public class TasksControllerTests : IClassFixture<WebApplicationFactory<Program>
 }
 ```
 
-> **Key:** The `public partial class Program { }` line at the bottom of `Program.cs` is required to make the entry point class accessible to the test project. Without it, `WebApplicationFactory<Program>` cannot find the application.
+> **Ключовий момент:** Рядок `public partial class Program { }` внизу `Program.cs` необхідний для того, щоб зробити клас точки входу доступним для тестового проєкту. Без нього `WebApplicationFactory<Program>` не зможе знайти додаток.
 
-### 3.3 TestServer Internals
+### 3.3 Внутрішня будова TestServer
 
-The `TestServer` replaces Kestrel (the production HTTP server) with an in-memory transport:
+`TestServer` замінює Kestrel (продакшн HTTP-сервер) на in-memory транспорт:
 
 ```
-Production:
-  HttpClient ──[TCP/IP]──► Kestrel ──► ASP.NET Core Pipeline
+Продакшн:
+  HttpClient ──[TCP/IP]──► Kestrel ──► Конвеєр ASP.NET Core
 
-Testing:
-  HttpClient ──[in-memory]──► TestServer ──► ASP.NET Core Pipeline
+Тестування:
+  HttpClient ──[in-memory]──► TestServer ──► Конвеєр ASP.NET Core
 ```
 
-The `TestServer` creates a special `HttpMessageHandler` that short-circuits the network stack. When you call `factory.CreateClient()`, the returned `HttpClient` uses this handler internally.
+`TestServer` створює спеціальний `HttpMessageHandler`, який обходить мережевий стек. Коли ви викликаєте `factory.CreateClient()`, повернутий `HttpClient` використовує цей обробник внутрішньо.
 
 ```csharp
-// What CreateClient() does internally (simplified):
-var handler = _testServer.CreateHandler();     // in-memory handler
+// Що CreateClient() робить внутрішньо (спрощено):
+var handler = _testServer.CreateHandler();     // in-memory обробник
 var client = new HttpClient(handler)
 {
-    BaseAddress = new Uri("http://localhost")   // default base address
+    BaseAddress = new Uri("http://localhost")   // базова адреса за замовчуванням
 };
 ```
 
-This means:
-- Requests never leave the process
-- DNS resolution is not needed
-- No SSL/TLS negotiation
-- No port binding or conflicts
-- Extremely fast round-trips
+Це означає:
+- Запити ніколи не залишають процес
+- DNS-розв'язання не потрібне
+- Немає SSL/TLS-узгодження
+- Немає прив'язки до портів чи конфліктів
+- Надзвичайно швидкі запити-відповіді
 
-> **Discussion (5 min):** What are the trade-offs of in-memory testing? What issues might you miss by not using real HTTP? (Hint: think about TLS configuration, HTTP/2, load balancer behavior, CORS with a real browser.)
+> **Дискусія (5 хв):** Які компроміси in-memory тестування? Які проблеми можна пропустити, не використовуючи реальний HTTP? (Підказка: подумайте про конфігурацію TLS, HTTP/2, поведінку балансувальника навантаження, CORS з реальним браузером.)
 
 ---
 
-## 4. Custom WebApplicationFactory
+## 4. Власна WebApplicationFactory
 
-### 4.1 Why Customize?
+### 4.1 Навіщо налаштовувати?
 
-The default `WebApplicationFactory<Program>` uses your real `Program.cs` configuration. In production, your API might:
-- Connect to a real SQL Server database
-- Call external payment APIs
-- Send emails via SMTP
-- Use Azure Key Vault for secrets
+Стандартна `WebApplicationFactory<Program>` використовує вашу реальну конфігурацію `Program.cs`. У продакшні ваш API може:
+- Підключатися до реальної бази даних SQL Server
+- Викликати зовнішні платіжні API
+- Відправляти листи через SMTP
+- Використовувати Azure Key Vault для секретів
 
-You do not want any of that in tests. A custom factory lets you **replace** specific services while keeping the rest of the real pipeline.
+Нічого з цього не потрібно в тестах. Власна фабрика дозволяє **замінити** конкретні сервіси, зберігаючи решту реального конвеєра.
 
-### 4.2 Creating a Custom Factory
+### 4.2 Створення власної фабрики
 
 ```csharp
 // TaskApi.Tests/CustomWebApplicationFactory.cs
@@ -347,14 +347,14 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
     {
         builder.ConfigureServices(services =>
         {
-            // Remove the real repository registration
+            // Видалити реальну реєстрацію репозиторію
             var descriptor = services.SingleOrDefault(
                 d => d.ServiceType == typeof(ITaskRepository));
 
             if (descriptor is not null)
                 services.Remove(descriptor);
 
-            // Add an in-memory fake repository
+            // Додати in-memory фейковий репозиторій
             services.AddSingleton<ITaskRepository, InMemoryTaskRepository>();
         });
 
@@ -363,7 +363,7 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
 }
 ```
 
-### 4.3 A Reusable In-Memory Repository
+### 4.3 Повторно використовуваний In-Memory репозиторій
 
 ```csharp
 // TaskApi.Tests/Fakes/InMemoryTaskRepository.cs
@@ -402,7 +402,7 @@ public class InMemoryTaskRepository : ITaskRepository
 }
 ```
 
-### 4.4 Using the Custom Factory
+### 4.4 Використання власної фабрики
 
 ```csharp
 public class TasksControllerTests : IClassFixture<CustomWebApplicationFactory>
@@ -414,24 +414,24 @@ public class TasksControllerTests : IClassFixture<CustomWebApplicationFactory>
         _client = factory.CreateClient();
     }
 
-    // Tests now use InMemoryTaskRepository instead of the real database
+    // Тести тепер використовують InMemoryTaskRepository замість реальної бази даних
 }
 ```
 
-### 4.5 The Service Replacement Pattern
+### 4.5 Патерн заміни сервісів
 
-The general pattern for replacing services follows these steps:
+Загальний патерн заміни сервісів складається з таких кроків:
 
 ```
-1. Find the existing service descriptor
-2. Remove it from the service collection
-3. Register your test replacement
+1. Знайти існуючий дескриптор сервісу
+2. Видалити його з колекції сервісів
+3. Зареєструвати вашу тестову заміну
 
-services.RemoveAll<IMyService>();         // Step 1+2 combined
-services.AddSingleton<IMyService, FakeMyService>();  // Step 3
+services.RemoveAll<IMyService>();         // Кроки 1+2 об'єднані
+services.AddSingleton<IMyService, FakeMyService>();  // Крок 3
 ```
 
-Using `RemoveAll<T>()` from `Microsoft.Extensions.DependencyInjection.Extensions` is cleaner:
+Використання `RemoveAll<T>()` з `Microsoft.Extensions.DependencyInjection.Extensions` є чистішим:
 
 ```csharp
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -449,13 +449,13 @@ protected override void ConfigureWebHost(IWebHostBuilder builder)
 }
 ```
 
-> **Discussion (5 min):** When would you use a fake (like `InMemoryTaskRepository`) vs. an NSubstitute mock inside the factory? What are the trade-offs?
+> **Дискусія (5 хв):** Коли б ви використали фейк (як `InMemoryTaskRepository`) vs. NSubstitute мок всередині фабрики? Які компроміси?
 
 ---
 
-## 5. Testing HTTP Endpoints
+## 5. Тестування HTTP-ендпоінтів
 
-### 5.1 Testing GET Endpoints
+### 5.1 Тестування GET-ендпоінтів
 
 ```csharp
 public class TasksControllerGetTests : IClassFixture<CustomWebApplicationFactory>
@@ -495,7 +495,7 @@ public class TasksControllerGetTests : IClassFixture<CustomWebApplicationFactory
     [Fact]
     public async Task GetById_ExistingTask_ReturnsTaskAsync()
     {
-        // Arrange — create a task first
+        // Arrange — спочатку створюємо завдання
         var createRequest = new CreateTaskRequest("Test Task", "Description");
         var createResponse = await _client.PostAsJsonAsync("/api/tasks", createRequest);
         var created = await createResponse.Content.ReadFromJsonAsync<TaskItem>();
@@ -525,7 +525,7 @@ public class TasksControllerGetTests : IClassFixture<CustomWebApplicationFactory
 }
 ```
 
-### 5.2 Testing POST Endpoints
+### 5.2 Тестування POST-ендпоінтів
 
 ```csharp
 public class TasksControllerPostTests : IClassFixture<CustomWebApplicationFactory>
@@ -549,11 +549,11 @@ public class TasksControllerPostTests : IClassFixture<CustomWebApplicationFactor
         // Assert
         response.StatusCode.ShouldBe(HttpStatusCode.Created);
 
-        // Verify Location header points to the new resource
+        // Перевірка, що заголовок Location вказує на новий ресурс
         response.Headers.Location.ShouldNotBeNull();
         response.Headers.Location.ToString().ShouldContain("/api/tasks/");
 
-        // Verify response body
+        // Перевірка тіла відповіді
         var task = await response.Content.ReadFromJsonAsync<TaskItem>();
         task.ShouldNotBeNull();
         task.Id.ShouldBeGreaterThan(0);
@@ -564,7 +564,7 @@ public class TasksControllerPostTests : IClassFixture<CustomWebApplicationFactor
     [Fact]
     public async Task Create_MissingTitle_Returns400Async()
     {
-        // Arrange — send an empty object (Title is required)
+        // Arrange — відправляємо порожній об'єкт (Title обов'язковий)
         var request = new { };
 
         // Act
@@ -589,13 +589,13 @@ public class TasksControllerPostTests : IClassFixture<CustomWebApplicationFactor
 }
 ```
 
-### 5.3 Testing PUT Endpoints
+### 5.3 Тестування PUT-ендпоінтів
 
 ```csharp
 [Fact]
 public async Task Update_ExistingTask_Returns204Async()
 {
-    // Arrange — create a task first
+    // Arrange — спочатку створюємо завдання
     var createRequest = new CreateTaskRequest("Original Title", null);
     var createResponse = await _client.PostAsJsonAsync("/api/tasks", createRequest);
     var created = await createResponse.Content.ReadFromJsonAsync<TaskItem>();
@@ -610,7 +610,7 @@ public async Task Update_ExistingTask_Returns204Async()
     // Assert
     response.StatusCode.ShouldBe(HttpStatusCode.NoContent);
 
-    // Verify the update persisted
+    // Перевірка збереження оновлення
     var updated = await _client.GetFromJsonAsync<TaskItem>(
         $"/api/tasks/{created.Id}");
     updated!.Title.ShouldBe("Updated Title");
@@ -632,13 +632,13 @@ public async Task Update_NonExistentTask_Returns404Async()
 }
 ```
 
-### 5.4 Testing DELETE Endpoints
+### 5.4 Тестування DELETE-ендпоінтів
 
 ```csharp
 [Fact]
 public async Task Delete_ExistingTask_Returns204Async()
 {
-    // Arrange — create a task first
+    // Arrange — спочатку створюємо завдання
     var createResponse = await _client.PostAsJsonAsync(
         "/api/tasks", new CreateTaskRequest("To Delete", null));
     var created = await createResponse.Content.ReadFromJsonAsync<TaskItem>();
@@ -649,7 +649,7 @@ public async Task Delete_ExistingTask_Returns204Async()
     // Assert
     response.StatusCode.ShouldBe(HttpStatusCode.NoContent);
 
-    // Verify it is gone
+    // Перевірка видалення
     var getResponse = await _client.GetAsync($"/api/tasks/{created.Id}");
     getResponse.StatusCode.ShouldBe(HttpStatusCode.NotFound);
 }
@@ -665,41 +665,41 @@ public async Task Delete_NonExistentTask_Returns404Async()
 }
 ```
 
-### 5.5 HTTP Status Code Reference
+### 5.5 Довідник кодів стану HTTP
 
-| Status Code | Meaning | When to Use |
+| Код стану | Значення | Коли використовувати |
 |---|---|---|
-| `200 OK` | Success with body | GET returning data |
-| `201 Created` | Resource created | POST with Location header |
-| `204 No Content` | Success without body | PUT, DELETE success |
-| `400 Bad Request` | Invalid input | Validation failures |
-| `401 Unauthorized` | Not authenticated | Missing/invalid credentials |
-| `403 Forbidden` | Not authorized | Authenticated but insufficient permissions |
-| `404 Not Found` | Resource not found | GET/PUT/DELETE with invalid ID |
-| `409 Conflict` | State conflict | Duplicate creation, version mismatch |
-| `500 Internal Server Error` | Server error | Unhandled exceptions |
+| `200 OK` | Успіх з тілом | GET, що повертає дані |
+| `201 Created` | Ресурс створено | POST із заголовком Location |
+| `204 No Content` | Успіх без тіла | PUT, DELETE успіх |
+| `400 Bad Request` | Невалідний ввід | Помилки валідації |
+| `401 Unauthorized` | Не автентифіковано | Відсутні/невалідні облікові дані |
+| `403 Forbidden` | Не авторизовано | Автентифіковано, але недостатньо прав |
+| `404 Not Found` | Ресурс не знайдено | GET/PUT/DELETE з невалідним ID |
+| `409 Conflict` | Конфлікт стану | Дублікат створення, невідповідність версій |
+| `500 Internal Server Error` | Помилка сервера | Необроблені винятки |
 
 ---
 
-## 6. Working with HttpClient in Tests
+## 6. Робота з HttpClient у тестах
 
-### 6.1 JSON Serialization and Deserialization
+### 6.1 Серіалізація та десеріалізація JSON
 
-The `System.Net.Http.Json` namespace provides extension methods that simplify JSON handling:
+Простір імен `System.Net.Http.Json` надає методи-розширення, що спрощують роботу з JSON:
 
 ```csharp
 using System.Net.Http.Json;
 
-// POST with JSON body
+// POST з JSON-тілом
 var response = await _client.PostAsJsonAsync("/api/tasks", new CreateTaskRequest("Title", null));
 
-// Read response body as JSON
+// Читання тіла відповіді як JSON
 var task = await response.Content.ReadFromJsonAsync<TaskItem>();
 
-// GET and deserialize in one call
+// GET та десеріалізація в одному виклику
 var tasks = await _client.GetFromJsonAsync<List<TaskItem>>("/api/tasks");
 
-// Custom serialization options
+// Власні налаштування серіалізації
 var options = new JsonSerializerOptions
 {
     PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -708,7 +708,7 @@ var options = new JsonSerializerOptions
 var result = await response.Content.ReadFromJsonAsync<TaskItem>(options);
 ```
 
-### 6.2 Setting Custom Headers
+### 6.2 Встановлення власних заголовків
 
 ```csharp
 [Fact]
@@ -729,17 +729,17 @@ public async Task GetAll_WithAcceptHeader_ReturnsJsonAsync()
 }
 ```
 
-### 6.3 Sending Form Data and Custom Content
+### 6.3 Відправка даних форми та власного контенту
 
 ```csharp
-// String content with explicit media type
+// Рядковий контент з явним медіатипом
 var jsonContent = new StringContent(
     """{"title": "My Task", "description": null}""",
     System.Text.Encoding.UTF8,
     "application/json");
 var response = await _client.PostAsync("/api/tasks", jsonContent);
 
-// Form URL-encoded content
+// Form URL-encoded контент
 var formContent = new FormUrlEncodedContent(new Dictionary<string, string>
 {
     ["username"] = "admin",
@@ -748,7 +748,7 @@ var formContent = new FormUrlEncodedContent(new Dictionary<string, string>
 var loginResponse = await _client.PostAsync("/api/auth/login", formContent);
 ```
 
-### 6.4 Reading Response Details
+### 6.4 Читання деталей відповіді
 
 ```csharp
 [Fact]
@@ -760,17 +760,17 @@ public async Task Create_ValidRequest_ReturnsExpectedHeadersAsync()
     // Act
     var response = await _client.PostAsJsonAsync("/api/tasks", request);
 
-    // Assert — status code
+    // Assert — код стану
     response.StatusCode.ShouldBe(HttpStatusCode.Created);
 
-    // Assert — headers
+    // Assert — заголовки
     response.Headers.Location.ShouldNotBeNull();
 
-    // Assert — response body as string (useful for debugging)
+    // Assert — тіло відповіді як рядок (корисно для налагодження)
     var body = await response.Content.ReadAsStringAsync();
     body.ShouldContain("Header Test");
 
-    // Assert — response body as typed object
+    // Assert — тіло відповіді як типізований об'єкт
     var task = await response.Content.ReadFromJsonAsync<TaskItem>();
     task!.Title.ShouldBe("Header Test");
 }
@@ -778,57 +778,57 @@ public async Task Create_ValidRequest_ReturnsExpectedHeadersAsync()
 
 ---
 
-## 7. Test Lifecycle: IClassFixture and IAsyncLifetime
+## 7. Життєвий цикл тестів: IClassFixture та IAsyncLifetime
 
-### 7.1 Understanding xUnit v3 Test Lifecycle
+### 7.1 Розуміння життєвого циклу тестів xUnit v3
 
-xUnit v3 creates a **new instance** of the test class for **every test method**. This provides natural test isolation but can be expensive if setup is costly:
+xUnit v3 створює **новий екземпляр** тестового класу для **кожного тестового методу**. Це забезпечує природну ізоляцію тестів, але може бути дорогим, якщо налаштування коштує багато:
 
 ```
-Test method 1:  new TestClass() → Run Test → Dispose
-Test method 2:  new TestClass() → Run Test → Dispose
-Test method 3:  new TestClass() → Run Test → Dispose
+Тестовий метод 1:  new TestClass() → Запуск тесту → Dispose
+Тестовий метод 2:  new TestClass() → Запуск тесту → Dispose
+Тестовий метод 3:  new TestClass() → Запуск тесту → Dispose
                     ▲
                     │
-           New factory + TestServer for EVERY test?
-           That would be very slow!
+           Нова фабрика + TestServer для КОЖНОГО тесту?
+           Це було б дуже повільно!
 ```
 
-### 7.2 IClassFixture — Share Expensive Resources
+### 7.2 IClassFixture — Спільне використання дорогих ресурсів
 
-`IClassFixture<T>` tells xUnit to create a **single instance** of the fixture type and share it across all tests in the class:
+`IClassFixture<T>` вказує xUnit створити **один екземпляр** типу фікстури та поділити його між усіма тестами в класі:
 
 ```csharp
 public class TasksControllerTests : IClassFixture<CustomWebApplicationFactory>
 {
     private readonly HttpClient _client;
 
-    // Constructor receives the SHARED factory instance
+    // Конструктор отримує СПІЛЬНИЙ екземпляр фабрики
     public TasksControllerTests(CustomWebApplicationFactory factory)
     {
         _client = factory.CreateClient();
     }
 
-    // All test methods share the same factory (and TestServer)
-    // But each test gets its own HttpClient
+    // Всі тестові методи поділяють ту саму фабрику (і TestServer)
+    // Але кожен тест отримує свій HttpClient
 }
 ```
 
 ```
-IClassFixture lifecycle:
+Життєвий цикл IClassFixture:
 
-new CustomWebApplicationFactory()      ← Created ONCE before any test
+new CustomWebApplicationFactory()      ← Створюється ОДИН раз перед будь-яким тестом
     │
-    ├── new TestClass(factory) → Test 1 → Dispose TestClass
-    ├── new TestClass(factory) → Test 2 → Dispose TestClass
-    ├── new TestClass(factory) → Test 3 → Dispose TestClass
+    ├── new TestClass(factory) → Тест 1 → Dispose TestClass
+    ├── new TestClass(factory) → Тест 2 → Dispose TestClass
+    ├── new TestClass(factory) → Тест 3 → Dispose TestClass
     │
-Dispose factory                        ← Disposed ONCE after all tests
+Dispose factory                        ← Утилізується ОДИН раз після всіх тестів
 ```
 
-### 7.3 IAsyncLifetime — Async Setup and Teardown
+### 7.3 IAsyncLifetime — Асинхронне налаштування та очищення
 
-When test setup or teardown requires async operations (e.g., seeding a database, cleaning up data), implement `IAsyncLifetime`:
+Коли налаштування або очищення тесту вимагає асинхронних операцій (напр., заповнення бази даних, очищення даних), реалізуйте `IAsyncLifetime`:
 
 ```csharp
 public class TasksControllerTests
@@ -843,28 +843,28 @@ public class TasksControllerTests
         _client = factory.CreateClient();
     }
 
-    // Called BEFORE each test method
+    // Викликається ПЕРЕД кожним тестовим методом
     public async Task InitializeAsync()
     {
-        // Seed test data
+        // Заповнення тестовими даними
         using var scope = _factory.Services.CreateScope();
         var repo = scope.ServiceProvider.GetRequiredService<ITaskRepository>();
         await repo.CreateAsync(new TaskItem(0, "Seeded Task", "Description", false));
     }
 
-    // Called AFTER each test method
+    // Викликається ПІСЛЯ кожного тестового методу
     public async Task DisposeAsync()
     {
-        // Clean up test data
+        // Очищення тестових даних
         using var scope = _factory.Services.CreateScope();
         var repo = scope.ServiceProvider.GetRequiredService<ITaskRepository>();
-        await repo.ClearAllAsync(); // hypothetical cleanup method
+        await repo.ClearAllAsync(); // гіпотетичний метод очищення
     }
 
     [Fact]
     public async Task GetAll_WithSeededData_ReturnsSeededTaskAsync()
     {
-        // The seeded task is available here
+        // Заповнене завдання доступне тут
         var tasks = await _client.GetFromJsonAsync<TaskItem[]>("/api/tasks");
         tasks.ShouldNotBeNull();
         tasks.Length.ShouldBeGreaterThanOrEqualTo(1);
@@ -872,52 +872,53 @@ public class TasksControllerTests
 }
 ```
 
-### 7.4 IClassFixture vs. IAsyncLifetime Comparison
+### 7.4 Порівняння IClassFixture та IAsyncLifetime
 
 ```
 ┌──────────────────────────┬──────────────────────────┐
 │    IClassFixture<T>      │     IAsyncLifetime        │
 ├──────────────────────────┼──────────────────────────┤
-│ Shares one instance of T │ Per-test setup/teardown   │
-│ across ALL tests in      │ InitializeAsync() before  │
-│ the class                │ each test                 │
-│                          │ DisposeAsync() after      │
-│ Good for: expensive      │ each test                 │
-│ resources (factory,      │                           │
-│ TestServer)              │ Good for: seeding data,   │
-│                          │ resetting state           │
-│ Scope: class-level       │ Scope: test-level         │
+│ Поділяє один екземпляр T │ Налаштування/очищення    │
+│ між УСІМА тестами        │ для кожного тесту        │
+│ в класі                  │ InitializeAsync() перед   │
+│                          │ кожним тестом             │
+│ Добре для: дорогих       │ DisposeAsync() після      │
+│ ресурсів (фабрика,       │ кожного тесту             │
+│ TestServer)              │                           │
+│                          │ Добре для: заповнення     │
+│ Область: рівень класу    │ даними, скидання стану    │
+│                          │ Область: рівень тесту     │
 └──────────────────────────┴──────────────────────────┘
 ```
 
-They are often used **together**: `IClassFixture` shares the factory, while `IAsyncLifetime` handles per-test data setup.
+Їх часто використовують **разом**: `IClassFixture` поділяє фабрику, тоді як `IAsyncLifetime` керує налаштуванням даних для кожного тесту.
 
-> **Discussion (5 min):** What happens if two tests modify the same shared data (e.g., both create a task with ID 1)? How can you prevent test interference?
+> **Дискусія (5 хв):** Що станеться, якщо два тести модифікують ті самі спільні дані (напр., обидва створюють завдання з ID 1)? Як можна запобігти взаємному впливу тестів?
 
 ---
 
-## 8. Test Isolation Strategies
+## 8. Стратегії ізоляції тестів
 
-### 8.1 The Shared State Problem
+### 8.1 Проблема спільного стану
 
-When tests share a `WebApplicationFactory` (and thus a server and its services), they can interfere with each other if services maintain state:
+Коли тести поділяють `WebApplicationFactory` (і відповідно сервер та його сервіси), вони можуть впливати один на одного, якщо сервіси зберігають стан:
 
 ```
-Test A: Creates task "Task A" ─────────► Repository now has [Task A]
-Test B: Calls GetAll ─────────────────► Gets [Task A] ← UNEXPECTED!
-Test C: Creates task "Task C" ─────────► Repository now has [Task A, Task C]
-Test D: Asserts count == 1 ──────────► FAILS! Count is 2
+Тест A: Створює завдання "Task A" ────► Репозиторій тепер має [Task A]
+Тест B: Викликає GetAll ──────────────► Отримує [Task A] ← НЕСПОДІВАНО!
+Тест C: Створює завдання "Task C" ────► Репозиторій тепер має [Task A, Task C]
+Тест D: Перевіряє count == 1 ─────────► ПРОВАЛ! Кількість 2
 ```
 
-### 8.2 Strategy 1: Fresh Client per Test
+### 8.2 Стратегія 1: Новий клієнт для кожного тесту
 
-Create a new `HttpClient` for each test with a unique factory configuration:
+Створіть новий `HttpClient` для кожного тесту з унікальною конфігурацією фабрики:
 
 ```csharp
 [Fact]
 public async Task GetAll_ReturnsOnlyCurrentTestDataAsync()
 {
-    // Create a factory with a fresh, empty repository
+    // Створюємо фабрику з новим, порожнім репозиторієм
     await using var factory = new WebApplicationFactory<Program>()
         .WithWebHostBuilder(builder =>
         {
@@ -930,16 +931,16 @@ public async Task GetAll_ReturnsOnlyCurrentTestDataAsync()
 
     var client = factory.CreateClient();
 
-    // This test has its own isolated repository
+    // Цей тест має власний ізольований репозиторій
     var tasks = await client.GetFromJsonAsync<TaskItem[]>("/api/tasks");
     tasks.ShouldNotBeNull();
     tasks.ShouldBeEmpty();
 }
 ```
 
-### 8.3 Strategy 2: Reset State Between Tests
+### 8.3 Стратегія 2: Скидання стану між тестами
 
-Use `IAsyncLifetime` to reset shared state:
+Використовуйте `IAsyncLifetime` для скидання спільного стану:
 
 ```csharp
 public class TasksControllerTests
@@ -956,7 +957,7 @@ public class TasksControllerTests
 
     public Task InitializeAsync()
     {
-        // Reset the in-memory repository before each test
+        // Скидання in-memory репозиторію перед кожним тестом
         using var scope = _factory.Services.CreateScope();
         var repo = scope.ServiceProvider.GetRequiredService<ITaskRepository>();
         if (repo is InMemoryTaskRepository inMemRepo)
@@ -970,15 +971,15 @@ public class TasksControllerTests
 }
 ```
 
-### 8.4 Strategy 3: Unique Data per Test
+### 8.4 Стратегія 3: Унікальні дані для кожного тесту
 
-Design tests so they do not conflict — each test creates and verifies its own unique data:
+Проєктуйте тести так, щоб вони не конфліктували — кожен тест створює та перевіряє свої власні унікальні дані:
 
 ```csharp
 [Fact]
 public async Task Create_UniqueTask_CanBeRetrievedByIdAsync()
 {
-    // Arrange — use a unique identifier to avoid conflicts
+    // Arrange — використовуємо унікальний ідентифікатор для уникнення конфліктів
     var uniqueTitle = $"Task-{Guid.NewGuid()}";
     var request = new CreateTaskRequest(uniqueTitle, "Isolation test");
 
@@ -986,41 +987,41 @@ public async Task Create_UniqueTask_CanBeRetrievedByIdAsync()
     var createResponse = await _client.PostAsJsonAsync("/api/tasks", request);
     var created = await createResponse.Content.ReadFromJsonAsync<TaskItem>();
 
-    // Assert — retrieve by ID (not affected by other tests)
+    // Assert — отримуємо за ID (не залежить від інших тестів)
     var task = await _client.GetFromJsonAsync<TaskItem>(
         $"/api/tasks/{created!.Id}");
     task!.Title.ShouldBe(uniqueTitle);
 }
 ```
 
-### 8.5 Comparison of Isolation Strategies
+### 8.5 Порівняння стратегій ізоляції
 
-| Strategy | Pros | Cons |
+| Стратегія | Переваги | Недоліки |
 |---|---|---|
-| **Fresh factory per test** | Complete isolation | Slow — new server per test |
-| **Reset state between tests** | Fast, shared server | Must remember to reset everything |
-| **Unique data per test** | Fast, no cleanup needed | Can accumulate stale data |
-| **Transaction rollback** | Clean, database-aware | Only works with real databases |
+| **Нова фабрика для кожного тесту** | Повна ізоляція | Повільно — новий сервер для кожного тесту |
+| **Скидання стану між тестами** | Швидко, спільний сервер | Потрібно пам'ятати скидати все |
+| **Унікальні дані для кожного тесту** | Швидко, без очищення | Може накопичувати застарілі дані |
+| **Відкат транзакцій** | Чисто, враховує базу даних | Працює лише з реальними базами даних |
 
 ---
 
-## 9. Testing Middleware
+## 9. Тестування Middleware
 
-### 9.1 What is Middleware?
+### 9.1 Що таке Middleware?
 
-Middleware components form a pipeline that processes every HTTP request and response:
+Компоненти middleware формують конвеєр, що обробляє кожен HTTP-запит та відповідь:
 
 ```
-Request ──► Middleware 1 ──► Middleware 2 ──► Middleware 3 ──► Endpoint
-            (Logging)        (Auth)          (Error Handler)
-Response ◄── Middleware 1 ◄── Middleware 2 ◄── Middleware 3 ◄── Endpoint
+Запит ──► Middleware 1 ──► Middleware 2 ──► Middleware 3 ──► Ендпоінт
+          (Логування)       (Auth)          (Обробка помилок)
+Відповідь ◄── Middleware 1 ◄── Middleware 2 ◄── Middleware 3 ◄── Ендпоінт
 ```
 
-Common middleware: exception handling, authentication, authorization, CORS, rate limiting, request logging.
+Поширені middleware: обробка винятків, автентифікація, авторизація, CORS, обмеження частоти, логування запитів.
 
-### 9.2 Testing Exception Handling Middleware
+### 9.2 Тестування Middleware обробки винятків
 
-Consider a global exception handler:
+Розглянемо глобальний обробник винятків:
 
 ```csharp
 // Middleware/GlobalExceptionMiddleware.cs
@@ -1058,13 +1059,13 @@ public class GlobalExceptionMiddleware(RequestDelegate next, ILogger<GlobalExcep
 }
 ```
 
-Test that the middleware transforms exceptions into proper HTTP responses:
+Перевірка, що middleware перетворює винятки на коректні HTTP-відповіді:
 
 ```csharp
 [Fact]
 public async Task Middleware_UnhandledException_Returns500WithProblemDetailsAsync()
 {
-    // Arrange — configure a factory where the service throws
+    // Arrange — налаштовуємо фабрику, де сервіс генерує виняток
     await using var factory = new WebApplicationFactory<Program>()
         .WithWebHostBuilder(builder =>
         {
@@ -1096,7 +1097,7 @@ public async Task Middleware_UnhandledException_Returns500WithProblemDetailsAsyn
 }
 ```
 
-### 9.3 Testing CORS Middleware
+### 9.3 Тестування CORS Middleware
 
 ```csharp
 [Fact]
@@ -1119,9 +1120,9 @@ public async Task Options_CorsPreflightRequest_ReturnsCorrectHeadersAsync()
 }
 ```
 
-### 9.4 Testing Request Logging Middleware
+### 9.4 Тестування Middleware логування запитів
 
-You can capture logs in tests by registering a custom log provider:
+Ви можете захоплювати логи в тестах, зареєструвавши власний провайдер логування:
 
 ```csharp
 public class TestLoggerProvider : ILoggerProvider
@@ -1184,19 +1185,19 @@ public async Task Request_IsLoggedByMiddlewareAsync()
 
 ---
 
-## 10. Testing Authentication and Authorization
+## 10. Тестування автентифікації та авторизації
 
-### 10.1 The Challenge
+### 10.1 Виклик
 
-Production APIs often require authentication (JWT, cookies, API keys). In integration tests, you need to either:
+Продакшн API часто вимагають автентифікації (JWT, cookies, API-ключі). В інтеграційних тестах потрібно або:
 
-1. **Bypass authentication** entirely (for testing non-auth logic)
-2. **Simulate authentication** with fake tokens or claims
-3. **Test the auth pipeline** itself
+1. **Обійти автентифікацію** повністю (для тестування логіки, не пов'язаної з auth)
+2. **Імітувати автентифікацію** з фейковими токенами або claims
+3. **Тестувати сам конвеєр auth**
 
-### 10.2 Strategy 1: Fake Authentication Handler
+### 10.2 Стратегія 1: Фейковий обробник автентифікації
 
-ASP.NET Core allows you to register a custom authentication handler that always succeeds:
+ASP.NET Core дозволяє зареєструвати власний обробник автентифікації, який завжди успішний:
 
 ```csharp
 // TaskApi.Tests/Auth/TestAuthHandler.cs
@@ -1224,7 +1225,7 @@ public class TestAuthHandler : AuthenticationHandler<AuthenticationSchemeOptions
 
     protected override Task<AuthenticateResult> HandleAuthenticateAsync()
     {
-        // Check if the test wants to simulate an unauthenticated request
+        // Перевірка, чи тест хоче імітувати неавтентифікований запит
         if (Context.Request.Headers.ContainsKey("X-Test-Unauthenticated"))
         {
             return Task.FromResult(AuthenticateResult.Fail("Unauthenticated"));
@@ -1237,7 +1238,7 @@ public class TestAuthHandler : AuthenticationHandler<AuthenticationSchemeOptions
             new(ClaimTypes.Role, "User")
         };
 
-        // Allow tests to add custom roles via header
+        // Дозволити тестам додавати власні ролі через заголовок
         if (Context.Request.Headers.TryGetValue("X-Test-Role", out var role))
         {
             claims.Add(new Claim(ClaimTypes.Role, role.ToString()));
@@ -1252,7 +1253,7 @@ public class TestAuthHandler : AuthenticationHandler<AuthenticationSchemeOptions
 }
 ```
 
-### 10.3 Registering the Test Auth Handler
+### 10.3 Реєстрація тестового обробника автентифікації
 
 ```csharp
 public class AuthenticatedWebApplicationFactory : WebApplicationFactory<Program>
@@ -1261,15 +1262,15 @@ public class AuthenticatedWebApplicationFactory : WebApplicationFactory<Program>
     {
         builder.ConfigureServices(services =>
         {
-            // Remove real authentication
+            // Видалити реальну автентифікацію
             services.RemoveAll<IAuthenticationHandler>();
 
-            // Add test authentication
+            // Додати тестову автентифікацію
             services.AddAuthentication(TestAuthHandler.SchemeName)
                 .AddScheme<AuthenticationSchemeOptions, TestAuthHandler>(
                     TestAuthHandler.SchemeName, options => { });
 
-            // Replace other services as needed
+            // Замінити інші сервіси за потреби
             services.RemoveAll<ITaskRepository>();
             services.AddSingleton<ITaskRepository, InMemoryTaskRepository>();
         });
@@ -1279,7 +1280,7 @@ public class AuthenticatedWebApplicationFactory : WebApplicationFactory<Program>
 }
 ```
 
-### 10.4 Testing Authenticated Endpoints
+### 10.4 Тестування автентифікованих ендпоінтів
 
 ```csharp
 public class AuthenticatedTasksControllerTests
@@ -1296,7 +1297,7 @@ public class AuthenticatedTasksControllerTests
     [Fact]
     public async Task GetAll_AuthenticatedUser_Returns200Async()
     {
-        // Act — TestAuthHandler automatically authenticates
+        // Act — TestAuthHandler автоматично автентифікує
         var response = await _client.GetAsync("/api/tasks");
 
         // Assert
@@ -1306,7 +1307,7 @@ public class AuthenticatedTasksControllerTests
     [Fact]
     public async Task GetAll_UnauthenticatedUser_Returns401Async()
     {
-        // Arrange — signal the test handler to reject
+        // Arrange — сигнал тестовому обробнику відхилити
         var request = new HttpRequestMessage(HttpMethod.Get, "/api/tasks");
         request.Headers.Add("X-Test-Unauthenticated", "true");
 
@@ -1320,7 +1321,7 @@ public class AuthenticatedTasksControllerTests
     [Fact]
     public async Task DeleteTask_AdminRole_Returns204Async()
     {
-        // Arrange — create a task, then delete as admin
+        // Arrange — створюємо завдання, потім видаляємо як адмін
         var createResponse = await _client.PostAsJsonAsync(
             "/api/tasks", new CreateTaskRequest("Admin Task", null));
         var task = await createResponse.Content.ReadFromJsonAsync<TaskItem>();
@@ -1339,9 +1340,9 @@ public class AuthenticatedTasksControllerTests
     [Fact]
     public async Task DeleteTask_RegularUser_Returns403Async()
     {
-        // Arrange — the endpoint requires Admin role
+        // Arrange — ендпоінт вимагає роль Admin
         var request = new HttpRequestMessage(HttpMethod.Delete, "/api/tasks/1");
-        // No X-Test-Role header — default is "User" role only
+        // Без заголовка X-Test-Role — за замовчуванням лише роль "User"
 
         // Act
         var response = await _client.SendAsync(request);
@@ -1352,26 +1353,26 @@ public class AuthenticatedTasksControllerTests
 }
 ```
 
-### 10.5 Authorization Scenarios to Test
+### 10.5 Сценарії авторизації для тестування
 
-| Scenario | Expected Status | Test Description |
+| Сценарій | Очікуваний статус | Опис тесту |
 |---|---|---|
-| No credentials | 401 Unauthorized | Anonymous access to protected endpoint |
-| Valid credentials, no permission | 403 Forbidden | User without required role |
-| Valid credentials, has permission | 200/201/204 | Authorized access |
-| Expired token | 401 Unauthorized | Stale authentication |
-| Admin accessing user resource | 200 | Elevated privileges |
-| User accessing another user's data | 403 Forbidden | Resource-level authorization |
+| Без облікових даних | 401 Unauthorized | Анонімний доступ до захищеного ендпоінту |
+| Валідні облікові дані, без дозволу | 403 Forbidden | Користувач без необхідної ролі |
+| Валідні облікові дані, є дозвіл | 200/201/204 | Авторизований доступ |
+| Прострочений токен | 401 Unauthorized | Застаріла автентифікація |
+| Адмін отримує доступ до ресурсу користувача | 200 | Підвищені привілеї |
+| Користувач отримує доступ до даних іншого користувача | 403 Forbidden | Авторизація на рівні ресурсу |
 
-> **Discussion (10 min):** In production, your API uses JWT tokens from an identity provider (e.g., Auth0, Azure AD). Why is it acceptable to bypass real JWT validation in integration tests? When would you want to test with real JWTs?
+> **Дискусія (10 хв):** У продакшні ваш API використовує JWT-токени від провайдера ідентифікації (напр., Auth0, Azure AD). Чому прийнятно обходити реальну валідацію JWT в інтеграційних тестах? Коли б ви хотіли тестувати з реальними JWT?
 
 ---
 
-## 11. Advanced Configuration with WithWebHostBuilder
+## 11. Розширена конфігурація з WithWebHostBuilder
 
-### 11.1 Inline Configuration Without a Custom Factory
+### 11.1 Інлайн-конфігурація без власної фабрики
 
-For one-off customizations, use `WithWebHostBuilder` directly on a `WebApplicationFactory`:
+Для одноразових налаштувань використовуйте `WithWebHostBuilder` безпосередньо на `WebApplicationFactory`:
 
 ```csharp
 [Fact]
@@ -1381,7 +1382,7 @@ public async Task GetAll_WithCustomConfiguration_UsesTestSettingsAsync()
     await using var factory = new WebApplicationFactory<Program>()
         .WithWebHostBuilder(builder =>
         {
-            // Override configuration
+            // Перевизначення конфігурації
             builder.ConfigureAppConfiguration((context, config) =>
             {
                 config.AddInMemoryCollection(new Dictionary<string, string?>
@@ -1392,7 +1393,7 @@ public async Task GetAll_WithCustomConfiguration_UsesTestSettingsAsync()
                 });
             });
 
-            // Override services
+            // Перевизначення сервісів
             builder.ConfigureServices(services =>
             {
                 services.RemoveAll<ITaskRepository>();
@@ -1408,9 +1409,9 @@ public async Task GetAll_WithCustomConfiguration_UsesTestSettingsAsync()
 }
 ```
 
-### 11.2 Accessing Services from Tests
+### 11.2 Доступ до сервісів з тестів
 
-You can resolve services from the factory's DI container to inspect state or seed data:
+Ви можете отримати сервіси з DI-контейнера фабрики для перевірки стану або заповнення даними:
 
 ```csharp
 [Fact]
@@ -1422,7 +1423,7 @@ public async Task Create_ValidTask_IsSavedToRepositoryAsync()
     // Act
     await _client.PostAsJsonAsync("/api/tasks", request);
 
-    // Assert — resolve the repository and verify directly
+    // Assert — отримуємо репозиторій та перевіряємо безпосередньо
     using var scope = _factory.Services.CreateScope();
     var repo = scope.ServiceProvider.GetRequiredService<ITaskRepository>();
     var allTasks = await repo.GetAllAsync();
@@ -1431,9 +1432,9 @@ public async Task Create_ValidTask_IsSavedToRepositoryAsync()
 }
 ```
 
-### 11.3 Using NSubstitute Inside WebApplicationFactory
+### 11.3 Використання NSubstitute всередині WebApplicationFactory
 
-You can inject NSubstitute mocks into the DI container for fine-grained control:
+Ви можете впроваджувати NSubstitute моки в DI-контейнер для детального контролю:
 
 ```csharp
 [Fact]
@@ -1461,7 +1462,7 @@ public async Task Create_ValidTask_CallsNotificationServiceAsync()
     await client.PostAsJsonAsync("/api/tasks",
         new CreateTaskRequest("Notify Test", null));
 
-    // Assert — verify the mock was called
+    // Assert — перевірка, що мок був викликаний
     await notificationService.Received(1)
         .NotifyTaskCreatedAsync(Arg.Is<string>(t => t == "Notify Test"));
 }
@@ -1469,130 +1470,130 @@ public async Task Create_ValidTask_CallsNotificationServiceAsync()
 
 ---
 
-## 12. Common Pitfalls and Best Practices
+## 12. Поширені помилки та найкращі практики
 
-### 12.1 Common Pitfalls
+### 12.1 Поширені помилки
 
-#### Pitfall 1: Forgetting `public partial class Program`
+#### Помилка 1: Забули `public partial class Program`
 
 ```csharp
-// Without this, WebApplicationFactory<Program> cannot find your application
-// Add to the bottom of Program.cs:
+// Без цього WebApplicationFactory<Program> не зможе знайти ваш додаток
+// Додайте внизу Program.cs:
 public partial class Program { }
 ```
 
-**Symptom:** Compile error: `'Program' is inaccessible due to its protection level`
+**Симптом:** Помилка компіляції: `'Program' is inaccessible due to its protection level`
 
-#### Pitfall 2: Not Disposing the Factory
+#### Помилка 2: Не утилізована фабрика
 
 ```csharp
-// BAD — factory is never disposed, TestServer leaks
+// ПОГАНО — фабрика ніколи не утилізується, TestServer витікає
 var factory = new WebApplicationFactory<Program>();
 var client = factory.CreateClient();
-// ... tests run, but server is never shut down
+// ... тести виконуються, але сервер ніколи не зупиняється
 
-// GOOD — use IClassFixture (xUnit manages disposal)
+// ДОБРЕ — використовуйте IClassFixture (xUnit керує утилізацією)
 public class MyTests : IClassFixture<WebApplicationFactory<Program>> { }
 
-// GOOD — use await using for inline factories
+// ДОБРЕ — використовуйте await using для інлайн фабрик
 await using var factory = new WebApplicationFactory<Program>();
 ```
 
-#### Pitfall 3: Sharing Mutable State Across Tests
+#### Помилка 3: Спільний змінний стан між тестами
 
 ```csharp
-// BAD — in-memory repository accumulates data across tests
+// ПОГАНО — in-memory репозиторій накопичує дані між тестами
 public class Tests : IClassFixture<CustomFactory>
 {
-    [Fact] public async Task Test1_CreatesData() { /* adds task */ }
-    [Fact] public async Task Test2_AssumesEmptyState() { /* FAILS! */ }
+    [Fact] public async Task Test1_CreatesData() { /* додає завдання */ }
+    [Fact] public async Task Test2_AssumesEmptyState() { /* ПРОВАЛ! */ }
 }
 
-// GOOD — reset state or use unique data
+// ДОБРЕ — скидайте стан або використовуйте унікальні дані
 public class Tests : IClassFixture<CustomFactory>, IAsyncLifetime
 {
-    public Task InitializeAsync() { /* clear repository */ }
+    public Task InitializeAsync() { /* очищення репозиторію */ }
 }
 ```
 
-#### Pitfall 4: Testing Against Real External Services
+#### Помилка 4: Тестування з реальними зовнішніми сервісами
 
 ```csharp
-// BAD — test calls a real payment API
-// Slow, flaky, may charge real money!
+// ПОГАНО — тест викликає реальний платіжний API
+// Повільно, нестабільно, може списати реальні гроші!
 
-// GOOD — replace with a fake or mock
+// ДОБРЕ — замініть фейком або моком
 services.RemoveAll<IPaymentGateway>();
 services.AddSingleton<IPaymentGateway, FakePaymentGateway>();
 ```
 
-#### Pitfall 5: Ignoring the Service Lifetime Mismatch
+#### Помилка 5: Ігнорування невідповідності lifetime сервісів
 
 ```csharp
-// BAD — replacing a Scoped service with Singleton can cause issues
-services.RemoveAll<ITaskRepository>();           // was Scoped
-services.AddSingleton<ITaskRepository>(mock);    // now Singleton
+// ПОГАНО — заміна Scoped сервісу на Singleton може спричинити проблеми
+services.RemoveAll<ITaskRepository>();           // був Scoped
+services.AddSingleton<ITaskRepository>(mock);    // тепер Singleton
 
-// The mock will be shared across all requests — which may or may not be
-// what you want. If the mock has mutable state, be careful.
+// Мок буде спільним для всіх запитів — що може бути або не бути
+// тим, що ви хочете. Якщо мок має змінний стан, будьте обережні.
 
-// GOOD — match the lifetime or be explicit about the choice
+// ДОБРЕ — відповідайте lifetime або будьте явними щодо вибору
 services.RemoveAll<ITaskRepository>();
 services.AddScoped<ITaskRepository>(_ => CreateFreshMock());
 ```
 
-#### Pitfall 6: Hardcoding Ports or URLs
+#### Помилка 6: Жорстко закодовані порти або URL
 
 ```csharp
-// BAD — assumes a specific port
+// ПОГАНО — припускає конкретний порт
 var client = new HttpClient { BaseAddress = new Uri("http://localhost:5000") };
 
-// GOOD — let the factory configure the base address
-var client = factory.CreateClient(); // base address is set automatically
+// ДОБРЕ — дозвольте фабриці налаштувати базову адресу
+var client = factory.CreateClient(); // базова адреса встановлюється автоматично
 ```
 
-### 12.2 Best Practices Summary
+### 12.2 Підсумок найкращих практик
 
 ```
-Best Practices for Integration Testing with WebApplicationFactory
-─────────────────────────────────────────────────────────────────
+Найкращі практики інтеграційного тестування з WebApplicationFactory
+──────────────────────────────────────────────────────────────────
 
-1. USE IClassFixture to share the factory across tests in a class
-   └── Avoids creating a new TestServer per test (expensive)
+1. ВИКОРИСТОВУЙТЕ IClassFixture для спільного використання фабрики між тестами класу
+   └── Уникає створення нового TestServer на кожен тест (дорого)
 
-2. REPLACE external dependencies (databases, APIs, email)
-   └── Use fakes for simple behavior, mocks for verification
+2. ЗАМІНЮЙТЕ зовнішні залежності (бази даних, API, email)
+   └── Використовуйте фейки для простої поведінки, моки для перевірки
 
-3. KEEP tests independent
-   └── Each test should pass when run alone or with other tests
+3. ТРИМАЙТЕ тести незалежними
+   └── Кожен тест повинен проходити при запуску окремо або з іншими тестами
 
-4. TEST the HTTP contract, not internal implementation
-   └── Assert status codes, headers, and response body shapes
+4. ТЕСТУЙТЕ HTTP-контракт, а не внутрішню реалізацію
+   └── Перевіряйте коди стану, заголовки та форму тіла відповіді
 
-5. USE meaningful test names
+5. ВИКОРИСТОВУЙТЕ зрозумілі назви тестів
    └── GetById_NonExistentTask_Returns404Async
 
-6. CLEAN UP state between tests
-   └── IAsyncLifetime or unique data per test
+6. ОЧИЩУЙТЕ стан між тестами
+   └── IAsyncLifetime або унікальні дані для кожного тесту
 
-7. TEST both happy paths AND error paths
+7. ТЕСТУЙТЕ як щасливі шляхи, ТАК І шляхи помилок
    └── 400, 401, 403, 404, 409, 500
 
-8. VERIFY response content, not just status codes
-   └── A 200 response with wrong data is still a bug
+8. ПЕРЕВІРЯЙТЕ вміст відповіді, а не тільки коди стану
+   └── Відповідь 200 з неправильними даними все одно є помилкою
 
-9. USE System.Net.Http.Json for clean serialization
+9. ВИКОРИСТОВУЙТЕ System.Net.Http.Json для чистої серіалізації
    └── PostAsJsonAsync, GetFromJsonAsync, ReadFromJsonAsync
 
-10. MATCH the async naming convention
-    └── Async suffix for all async test methods
+10. ДОТРИМУЙТЕСЬ конвенції іменування Async
+    └── Суфікс Async для всіх асинхронних тестових методів
 ```
 
 ---
 
-## 13. Putting It All Together: Complete Example
+## 13. Збираємо все разом: Повний приклад
 
-### 13.1 Project Structure
+### 13.1 Структура проєкту
 
 ```
 TaskApi/
@@ -1628,7 +1629,7 @@ TaskApi.Tests/
     └── GlobalExceptionMiddlewareTests.cs
 ```
 
-### 13.2 Complete Test Class
+### 13.2 Повний тестовий клас
 
 ```csharp
 using System.Net;
@@ -1654,7 +1655,7 @@ public class TasksControllerIntegrationTests
 
     public Task InitializeAsync()
     {
-        // Reset the repository before each test
+        // Скидання репозиторію перед кожним тестом
         using var scope = _factory.Services.CreateScope();
         var repo = scope.ServiceProvider.GetRequiredService<ITaskRepository>();
         if (repo is InMemoryTaskRepository inMemRepo)
@@ -1664,7 +1665,7 @@ public class TasksControllerIntegrationTests
 
     public Task DisposeAsync() => Task.CompletedTask;
 
-    // ── Helpers ──────────────────────────────────────────────
+    // ── Допоміжні методи ─────────────────────────────────────
 
     private async Task<TaskItem> CreateTestTaskAsync(
         string title = "Test Task", string? description = null)
@@ -1675,7 +1676,7 @@ public class TasksControllerIntegrationTests
         return (await response.Content.ReadFromJsonAsync<TaskItem>())!;
     }
 
-    // ── GET /api/tasks ──────────────────────────────────────
+    // ── GET /api/tasks ───────────────────────────────────────
 
     [Fact]
     public async Task GetAll_EmptyRepository_ReturnsEmptyArrayAsync()
@@ -1698,7 +1699,7 @@ public class TasksControllerIntegrationTests
         tasks.Length.ShouldBe(2);
     }
 
-    // ── GET /api/tasks/{id} ─────────────────────────────────
+    // ── GET /api/tasks/{id} ──────────────────────────────────
 
     [Fact]
     public async Task GetById_ExistingTask_ReturnsTaskWithCorrectDataAsync()
@@ -1723,7 +1724,7 @@ public class TasksControllerIntegrationTests
         response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
     }
 
-    // ── POST /api/tasks ─────────────────────────────────────
+    // ── POST /api/tasks ──────────────────────────────────────
 
     [Fact]
     public async Task Create_ValidTask_Returns201WithLocationAsync()
@@ -1752,7 +1753,7 @@ public class TasksControllerIntegrationTests
         response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
     }
 
-    // ── PUT /api/tasks/{id} ─────────────────────────────────
+    // ── PUT /api/tasks/{id} ──────────────────────────────────
 
     [Fact]
     public async Task Update_ExistingTask_Returns204AndPersistsChangesAsync()
@@ -1766,7 +1767,7 @@ public class TasksControllerIntegrationTests
 
         response.StatusCode.ShouldBe(HttpStatusCode.NoContent);
 
-        // Verify changes persisted
+        // Перевірка збереження змін
         var updated = await _client.GetFromJsonAsync<TaskItem>(
             $"/api/tasks/{created.Id}");
         updated!.Title.ShouldBe("After Update");
@@ -1784,7 +1785,7 @@ public class TasksControllerIntegrationTests
         response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
     }
 
-    // ── DELETE /api/tasks/{id} ──────────────────────────────
+    // ── DELETE /api/tasks/{id} ───────────────────────────────
 
     [Fact]
     public async Task Delete_ExistingTask_Returns204AndRemovesTaskAsync()
@@ -1807,7 +1808,7 @@ public class TasksControllerIntegrationTests
         response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
     }
 
-    // ── Content Negotiation ─────────────────────────────────
+    // ── Узгодження контенту ──────────────────────────────────
 
     [Fact]
     public async Task GetAll_ResponseIsJsonAsync()
@@ -1822,70 +1823,70 @@ public class TasksControllerIntegrationTests
 
 ---
 
-## 14. When to Use Integration Tests vs. Unit Tests
+## 14. Коли використовувати інтеграційні тести vs. модульні тести
 
-### 14.1 Decision Guide
+### 14.1 Посібник з прийняття рішень
 
 ```
-Ask yourself:
+Запитайте себе:
                                           ┌──────────────────────┐
-"Am I testing business logic              │                      │
- with no I/O or infrastructure?"──YES────►│   Write a UNIT TEST  │
-        │                                 │                      │
-        NO                                └──────────────────────┘
+"Чи тестую я бізнес-логіку              │                      │
+ без I/O або інфраструктури?"──ТАК─────►│  Пишіть МОДУЛЬНИЙ    │
+        │                                │  ТЕСТ                │
+        НІ                               └──────────────────────┘
         │
         ▼
-"Am I testing how components              ┌──────────────────────┐
- work together (routing, DI,              │                      │
- middleware, serialization)?"────YES──────►│ Write an INTEGRATION │
-        │                                 │ TEST                 │
-        NO                                └──────────────────────┘
+"Чи тестую я взаємодію                   ┌──────────────────────┐
+ компонентів (маршрутизація,             │                      │
+ DI, middleware, серіалізація)?"──ТАК───►│ Пишіть ІНТЕГРАЦІЙНИЙ │
+        │                                │ ТЕСТ                 │
+        НІ                               └──────────────────────┘
         │
         ▼
-"Am I testing the full system             ┌──────────────────────┐
- from a user's perspective                │                      │
- (browser, real DB, real APIs)?"──YES────►│  Write an E2E TEST   │
-        │                                 │                      │
-        NO                                └──────────────────────┘
+"Чи тестую я повну систему              ┌──────────────────────┐
+ з перспективи користувача               │                      │
+ (браузер, реальна БД, реальні API)?"─ТАК►│  Пишіть E2E ТЕСТ   │
+        │                                │                      │
+        НІ                               └──────────────────────┘
         │
         ▼
-  Reconsider what you are testing.
+  Переосмисліть, що ви тестуєте.
 ```
 
-### 14.2 What to Test Where
+### 14.2 Що тестувати де
 
-| Concern | Unit Test | Integration Test |
+| Питання | Модульний тест | Інтеграційний тест |
 |---|---|---|
-| Business rule: discount is 10% for orders over $100 | Yes | No |
-| Controller returns 404 for missing resource | No | Yes |
-| Service correctly maps DTO to entity | Yes | No |
-| POST /api/tasks returns 201 with Location header | No | Yes |
-| Validation rejects empty strings | Yes | Yes (both) |
-| Authentication rejects unauthenticated requests | No | Yes |
-| JSON property names are camelCase | No | Yes |
-| Database query returns correct results | No | Yes (Lecture 4) |
-| Middleware catches exceptions and returns 500 | No | Yes |
+| Бізнес-правило: знижка 10% для замовлень понад $100 | Так | Ні |
+| Контролер повертає 404 для відсутнього ресурсу | Ні | Так |
+| Сервіс коректно перетворює DTO на сутність | Так | Ні |
+| POST /api/tasks повертає 201 із заголовком Location | Ні | Так |
+| Валідація відхиляє порожні рядки | Так | Так (обидва) |
+| Автентифікація відхиляє неавтентифіковані запити | Ні | Так |
+| Назви JSON-властивостей у camelCase | Ні | Так |
+| Запит до бази даних повертає коректні результати | Ні | Так (Лекція 4) |
+| Middleware перехоплює винятки та повертає 500 | Ні | Так |
 
-> **Discussion (5 min):** Your team has limited time. Should you write more unit tests or more integration tests? What is the cost-benefit of each?
+> **Дискусія (5 хв):** Ваша команда має обмежений час. Чи потрібно писати більше модульних тестів чи інтеграційних? Яке співвідношення вартість/вигода кожного?
 
 ---
 
-## 15. Practical Exercise
+## 15. Практична вправа
 
-### Task: Build Integration Tests for a BookStore API
+### Завдання: Створити інтеграційні тести для BookStore API
 
-You are given a `BookStoreApi` with the following endpoints:
+Вам дано `BookStoreApi` з наступними ендпоінтами:
 
-| Method | Endpoint | Description |
+| Метод | Ендпоінт | Опис |
 |---|---|---|
-| GET | `/api/books` | List all books |
-| GET | `/api/books/{id}` | Get book by ID |
-| POST | `/api/books` | Create a new book |
-| PUT | `/api/books/{id}` | Update a book |
-| DELETE | `/api/books/{id}` | Delete a book (Admin only) |
-| GET | `/api/books/search?query=...` | Search books by title |
+| GET | `/api/books` | Список усіх книг |
+| GET | `/api/books/{id}` | Отримати книгу за ID |
+| POST | `/api/books` | Створити нову книгу |
+| PUT | `/api/books/{id}` | Оновити книгу |
+| DELETE | `/api/books/{id}` | Видалити книгу (лише Admin) |
+| GET | `/api/books/search?query=...` | Пошук книг за назвою |
 
-**Models:**
+**Моделі:**
 
 ```csharp
 public record Book(int Id, string Title, string Author, decimal Price, int Year);
@@ -1893,66 +1894,66 @@ public record CreateBookRequest(string Title, string Author, decimal Price, int 
 public record UpdateBookRequest(string Title, string Author, decimal Price, int Year);
 ```
 
-**Your tasks:**
+**Ваші завдання:**
 
-1. Create a `CustomWebApplicationFactory` that replaces the real database with an in-memory fake
-2. Write integration tests covering:
-   - GET all books returns 200 with correct JSON
-   - GET by ID returns 404 for non-existent book
-   - POST creates a book and returns 201 with Location header
-   - POST with missing required fields returns 400
-   - PUT updates an existing book and returns 204
-   - DELETE as Admin returns 204
-   - DELETE as regular User returns 403
-   - Search returns matching books
-3. Implement test isolation (state reset between tests)
-4. Add authentication testing using a `TestAuthHandler`
+1. Створити `CustomWebApplicationFactory`, що замінює реальну базу даних на in-memory фейк
+2. Написати інтеграційні тести, що покривають:
+   - GET всіх книг повертає 200 з коректним JSON
+   - GET за ID повертає 404 для неіснуючої книги
+   - POST створює книгу та повертає 201 із заголовком Location
+   - POST з відсутніми обов'язковими полями повертає 400
+   - PUT оновлює існуючу книгу та повертає 204
+   - DELETE як Admin повертає 204
+   - DELETE як звичайний User повертає 403
+   - Search повертає відповідні книги
+3. Реалізувати ізоляцію тестів (скидання стану між тестами)
+4. Додати тестування автентифікації за допомогою `TestAuthHandler`
 
-**Bonus challenges:**
-- Test that the API returns proper `ProblemDetails` for validation errors
-- Test content negotiation (Accept header)
-- Verify the response includes pagination headers for GET all
+**Бонусні завдання:**
+- Перевірити, що API повертає коректні `ProblemDetails` для помилок валідації
+- Тестувати узгодження контенту (заголовок Accept)
+- Перевірити, що відповідь включає заголовки пагінації для GET all
 
-> **Discussion (15 min):** Review each other's tests. Are there edge cases that were missed? How readable are the test names? Could you understand the expected API behavior just by reading the test names?
-
----
-
-## 16. Summary
-
-### Key Takeaways
-
-1. **Integration tests verify component interactions** — they catch bugs that unit tests cannot, such as routing errors, DI misconfiguration, and serialization issues
-
-2. **WebApplicationFactory creates an in-memory test server** — no real ports, no network latency, same ASP.NET Core pipeline as production
-
-3. **Custom factories let you replace services** — swap real databases, APIs, and email services with fakes or mocks using `ConfigureServices`
-
-4. **Test all HTTP verbs and status codes** — GET (200, 404), POST (201, 400), PUT (204, 404), DELETE (204, 404), authentication (401, 403)
-
-5. **IClassFixture shares the factory** across tests in a class, while **IAsyncLifetime** provides per-test setup and teardown
-
-6. **Test isolation is critical** — use state reset, unique data, or fresh factories to prevent test interference
-
-7. **Authentication can be faked** using a custom `AuthenticationHandler` that creates test claims and roles
-
-8. **Middleware is testable** — exception handlers, CORS, logging, and other pipeline components can be verified through HTTP responses
-
-9. **Use `System.Net.Http.Json`** for clean JSON serialization in tests (`PostAsJsonAsync`, `GetFromJsonAsync`)
-
-10. **Follow the Async naming convention** — all async test methods should end with `Async`
-
-### Preview of Next Lecture
-
-In **Lecture 4: Database Testing with Testcontainers**, we will:
-- Test real database queries and migrations using EF Core
-- Use Testcontainers to spin up SQL Server and PostgreSQL in Docker
-- Compare testing strategies: InMemory, SQLite, and Testcontainers
-- Test data integrity, transactions, and concurrent access
-- Integrate database testing with `WebApplicationFactory`
+> **Дискусія (15 хв):** Перегляньте тести одне одного. Чи є граничні випадки, які пропущені? Наскільки читабельні назви тестів? Чи могли б ви зрозуміти очікувану поведінку API, просто читаючи назви тестів?
 
 ---
 
-## References and Further Reading
+## 16. Підсумок
+
+### Ключові висновки
+
+1. **Інтеграційні тести перевіряють взаємодію компонентів** — вони виявляють помилки, які модульні тести не можуть, такі як помилки маршрутизації, неправильна конфігурація DI та проблеми серіалізації
+
+2. **WebApplicationFactory створює in-memory тестовий сервер** — без реальних портів, без мережевої затримки, той самий конвеєр ASP.NET Core, що й у продакшні
+
+3. **Власні фабрики дозволяють замінювати сервіси** — заміна реальних баз даних, API та email-сервісів на фейки або моки за допомогою `ConfigureServices`
+
+4. **Тестуйте всі HTTP-дієслова та коди стану** — GET (200, 404), POST (201, 400), PUT (204, 404), DELETE (204, 404), автентифікація (401, 403)
+
+5. **IClassFixture поділяє фабрику** між тестами класу, тоді як **IAsyncLifetime** забезпечує налаштування та очищення для кожного тесту
+
+6. **Ізоляція тестів є критичною** — використовуйте скидання стану, унікальні дані або нові фабрики для запобігання взаємному впливу тестів
+
+7. **Автентифікацію можна імітувати** за допомогою власного `AuthenticationHandler`, що створює тестові claims та ролі
+
+8. **Middleware можна тестувати** — обробники винятків, CORS, логування та інші компоненти конвеєра можна перевірити через HTTP-відповіді
+
+9. **Використовуйте `System.Net.Http.Json`** для чистої серіалізації JSON у тестах (`PostAsJsonAsync`, `GetFromJsonAsync`)
+
+10. **Дотримуйтесь конвенції іменування Async** — всі асинхронні тестові методи повинні закінчуватися на `Async`
+
+### Анонс наступної лекції
+
+У **Лекції 4: Тестування бази даних з Testcontainers** ми:
+- Тестуватимемо реальні запити та міграції бази даних з EF Core
+- Використаємо Testcontainers для запуску SQL Server та PostgreSQL в Docker
+- Порівняємо стратегії тестування: InMemory, SQLite та Testcontainers
+- Тестуватимемо цілісність даних, транзакції та конкурентний доступ
+- Інтегруємо тестування бази даних з `WebApplicationFactory`
+
+---
+
+## Посилання та додаткова література
 
 - **Microsoft Documentation: Integration tests in ASP.NET Core**
   - https://learn.microsoft.com/en-us/aspnet/core/test/integration-tests
@@ -1963,6 +1964,6 @@ In **Lecture 4: Database Testing with Testcontainers**, we will:
 - **xUnit v3 Documentation** — https://xunit.net/docs/getting-started/v3/cmdline
 - **Shouldly Documentation** — https://docs.shouldly.org/
 - **NSubstitute Documentation** — https://nsubstitute.github.io/help/getting-started/
-- **"Unit Testing Principles, Practices, and Patterns"** — Vladimir Khorikov (Manning, 2020) — Chapters 8-9 on integration testing
-- **ASP.NET Core in Action** — Andrew Lock (Manning, 3rd edition, 2023) — Chapter 36 on testing
+- **"Unit Testing Principles, Practices, and Patterns"** — Vladimir Khorikov (Manning, 2020) — Розділи 8-9 про інтеграційне тестування
+- **ASP.NET Core in Action** — Andrew Lock (Manning, 3rd edition, 2023) — Розділ 36 про тестування
 - **System.Net.Http.Json Namespace** — https://learn.microsoft.com/en-us/dotnet/api/system.net.http.json

@@ -1,46 +1,46 @@
-# Lab 4 — Integration Testing: API
+# Лабораторна 4 — Інтеграційне тестування: API
 
-## Objective
+## Мета
 
-Test full API request/response cycles including routing, model binding, validation, serialization, content negotiation, and HTTP status codes.
+Тестувати повні цикли запитів/відповідей API, включаючи маршрутизацію, прив'язку моделей, валідацію, серіалізацію, узгодження вмісту та коди HTTP-статусів.
 
-**Duration:** 60 minutes
+**Тривалість:** 60 хвилин
 
-## Prerequisites
+## Передумови
 
-Before starting this lab, make sure you have:
+Перед початком цієї лабораторної переконайтеся, що:
 
-- .NET 10+ SDK installed (`dotnet --version`)
-- A working understanding of ASP.NET Core controllers, model binding, and Data Annotations (or FluentValidation)
-- Familiarity with HTTP methods, status codes, and JSON serialization
-- Completed Lab 3 (integration testing with `WebApplicationFactory`)
+- Встановлений .NET 10+ SDK (`dotnet --version`)
+- Ви маєте робоче розуміння контролерів ASP.NET Core, прив'язки моделей та Data Annotations (або FluentValidation)
+- Ви знайомі з HTTP-методами, кодами статусів та серіалізацією JSON
+- Виконана Лабораторна 3 (інтеграційне тестування з `WebApplicationFactory`)
 
-## Key Concepts
+## Ключові поняття
 
-### Full-Cycle API Testing
+### Повноциклове тестування API
 
-Unlike unit tests that test a controller in isolation, API integration tests send real HTTP requests through the entire ASP.NET Core pipeline. This means routing, model binding, validation, filters, serialization, and content negotiation are all exercised in each test.
+На відміну від модульних тестів, що тестують контролер ізольовано, інтеграційні тести API надсилають реальні HTTP-запити через весь конвеєр ASP.NET Core. Це означає, що маршрутизація, прив'язка моделей, валідація, фільтри, серіалізація та узгодження вмісту задіюються в кожному тесті.
 
-### Validation Testing
+### Тестування валідації
 
-ASP.NET Core automatically validates models decorated with Data Annotations (e.g., `[Required]`, `[MaxLength]`) before the controller action executes. When validation fails, the framework returns a `400 Bad Request` with a `ValidationProblemDetails` body. Your tests must verify both the status code and the structure of the error response.
+ASP.NET Core автоматично валідує моделі, декоровані Data Annotations (наприклад, `[Required]`, `[MaxLength]`), перед виконанням дії контролера. Коли валідація не проходить, фреймворк повертає `400 Bad Request` з тілом `ValidationProblemDetails`. Ваші тести повинні перевіряти як код статусу, так і структуру відповіді з помилкою.
 
-### Content Negotiation
+### Узгодження вмісту
 
-The API should respond with the correct `Content-Type` header and serialization format. By default, ASP.NET Core returns JSON with camelCase property names. Tests should verify these conventions are consistent.
+API повинен відповідати з правильним заголовком `Content-Type` та форматом серіалізації. За замовчуванням ASP.NET Core повертає JSON з іменами властивостей у форматі camelCase. Тести повинні перевіряти, що ці угоди дотримуються послідовно.
 
-### Helper Methods and Base Classes
+### Допоміжні методи та базові класи
 
-Avoid duplicating HTTP call logic across tests. Extract common patterns (e.g., creating a task, asserting a 400 response) into helper methods or a shared base class. This keeps tests focused on the scenario being verified.
+Уникайте дублювання логіки HTTP-викликів у тестах. Виносіть спільні шаблони (наприклад, створення завдання, перевірка відповіді 400) у допоміжні методи або спільний базовий клас. Це дозволяє тестам зосередитися на сценарії, що перевіряється.
 
-## Tools
+## Інструменти
 
-- Language: C#
-- Framework: [xUnit v3](https://xunit.net/) (`xunit.v3`)
-- HTTP: `HttpClient` via `WebApplicationFactory`
-- Validation: Data Annotations / FluentValidation
+- Мова: C#
+- Фреймворк: [xUnit v3](https://xunit.net/) (`xunit.v3`)
+- HTTP: `HttpClient` через `WebApplicationFactory`
+- Валідація: Data Annotations / FluentValidation
 
-## Setup
+## Налаштування
 
 ```bash
 dotnet new sln -n Lab4
@@ -54,47 +54,47 @@ dotnet add Lab4.Tests package Microsoft.AspNetCore.Mvc.Testing
 dotnet add Lab4.Tests package Shouldly
 ```
 
-## Tasks
+## Завдання
 
-### Task 1 — CRUD API with Validation
+### Завдання 1 — CRUD API з валідацією
 
-Build a `TasksController` (to-do task management) with full CRUD:
+Побудуйте `TasksController` (керування завданнями) з повним CRUD:
 
 ```
-GET    /api/tasks              — list all tasks (support ?status=completed query)
-GET    /api/tasks/{id}         — get task by id
-POST   /api/tasks              — create task
-PUT    /api/tasks/{id}         — update task
-DELETE /api/tasks/{id}         — delete task
-PATCH  /api/tasks/{id}/status  — update only status
+GET    /api/tasks              — отримати список усіх завдань (підтримка ?status=completed запиту)
+GET    /api/tasks/{id}         — отримати завдання за id
+POST   /api/tasks              — створити завдання
+PUT    /api/tasks/{id}         — оновити завдання
+DELETE /api/tasks/{id}         — видалити завдання
+PATCH  /api/tasks/{id}/status  — оновити лише статус
 ```
 
-Model:
+Модель:
 
 ```csharp
 public class TaskItem
 {
     public int Id { get; set; }
-    public string Title { get; set; }        // required, max 200 chars
-    public string Description { get; set; }  // optional, max 1000 chars
+    public string Title { get; set; }        // обов'язкове, макс. 200 символів
+    public string Description { get; set; }  // необов'язкове, макс. 1000 символів
     public string Status { get; set; }       // "pending", "in_progress", "completed"
     public DateTime CreatedAt { get; set; }
-    public DateTime? DueDate { get; set; }   // must be in the future when creating
+    public DateTime? DueDate { get; set; }   // має бути у майбутньому при створенні
 }
 ```
 
-Write integration tests covering:
+Напишіть інтеграційні тести, що покривають:
 
-1. Successful CRUD operations with correct status codes (200, 201, 204, 404)
-2. Validation errors return 400 with proper error messages
-3. Invalid status values are rejected
-4. Query filtering by status works correctly
-5. Creating a task with past `DueDate` returns validation error
-6. Edge cases: non-existing resource returns 404 with structured error, empty body returns 400
+1. Успішні CRUD-операції з правильними кодами статусів (200, 201, 204, 404)
+2. Помилки валідації повертають 400 з відповідними повідомленнями про помилки
+3. Невалідні значення статусу відхиляються
+4. Фільтрація запитів за статусом працює правильно
+5. Створення завдання з минулою `DueDate` повертає помилку валідації
+6. Граничні випадки: неіснуючий ресурс повертає 404 зі структурованою помилкою, порожнє тіло повертає 400
 
-**Minimum test count: 8 tests**
+**Мінімальна кількість тестів: 8 тестів**
 
-#### Example: CRUD Test with Shouldly
+#### Приклад: CRUD-тест з Shouldly
 
 ```csharp
 public class TasksApiTests : IClassFixture<WebApplicationFactory<Program>>
@@ -221,39 +221,39 @@ public class TasksApiTests : IClassFixture<WebApplicationFactory<Program>>
 }
 ```
 
-#### Expected Behavior Table — CRUD Operations
+#### Таблиця очікуваної поведінки — CRUD-операції
 
-| Operation | Scenario | Expected Status | Notes |
+| Операція | Сценарій | Очікуваний статус | Примітки |
 |---|---|---|---|
-| `POST /api/tasks` | Valid body | 201 Created | Returns created task with `Id` |
-| `POST /api/tasks` | Missing `Title` | 400 Bad Request | Error mentions `Title` |
-| `POST /api/tasks` | `Title` > 200 chars | 400 Bad Request | Validation error |
-| `POST /api/tasks` | Invalid `Status` value | 400 Bad Request | Only `pending`, `in_progress`, `completed` |
-| `POST /api/tasks` | Past `DueDate` | 400 Bad Request | Must be in the future |
-| `GET /api/tasks` | No filter | 200 OK | Returns all tasks |
-| `GET /api/tasks?status=completed` | Filter by status | 200 OK | Only completed tasks |
-| `GET /api/tasks/{id}` | Existing task | 200 OK | Returns task JSON |
-| `GET /api/tasks/{id}` | Non-existing task | 404 Not Found | Structured error |
-| `PUT /api/tasks/{id}` | Valid update | 200 OK | Returns updated task |
-| `PATCH /api/tasks/{id}/status` | Valid status change | 200 OK | Only status changes |
-| `DELETE /api/tasks/{id}` | Existing task | 204 No Content | Empty body |
-| `DELETE /api/tasks/{id}` | Non-existing task | 404 Not Found | Structured error |
+| `POST /api/tasks` | Валідне тіло | 201 Created | Повертає створене завдання з `Id` |
+| `POST /api/tasks` | Відсутній `Title` | 400 Bad Request | Помилка згадує `Title` |
+| `POST /api/tasks` | `Title` > 200 символів | 400 Bad Request | Помилка валідації |
+| `POST /api/tasks` | Невалідне значення `Status` | 400 Bad Request | Лише `pending`, `in_progress`, `completed` |
+| `POST /api/tasks` | Минула `DueDate` | 400 Bad Request | Має бути у майбутньому |
+| `GET /api/tasks` | Без фільтра | 200 OK | Повертає всі завдання |
+| `GET /api/tasks?status=completed` | Фільтр за статусом | 200 OK | Лише завершені завдання |
+| `GET /api/tasks/{id}` | Існуюче завдання | 200 OK | Повертає JSON завдання |
+| `GET /api/tasks/{id}` | Неіснуюче завдання | 404 Not Found | Структурована помилка |
+| `PUT /api/tasks/{id}` | Валідне оновлення | 200 OK | Повертає оновлене завдання |
+| `PATCH /api/tasks/{id}/status` | Валідна зміна статусу | 200 OK | Змінюється лише статус |
+| `DELETE /api/tasks/{id}` | Існуюче завдання | 204 No Content | Порожнє тіло |
+| `DELETE /api/tasks/{id}` | Неіснуюче завдання | 404 Not Found | Структурована помилка |
 
-> **Hint:** Use a custom `ICustomValidation` or a `[CustomValidation]` attribute for the `DueDate` future-date check, since Data Annotations alone cannot compare against `DateTime.UtcNow`.
+> **Підказка:** Використовуйте власний `ICustomValidation` або атрибут `[CustomValidation]` для перевірки майбутньої дати `DueDate`, оскільки Data Annotations самі по собі не можуть порівнювати з `DateTime.UtcNow`.
 
-### Task 2 — Content Negotiation and Serialization
+### Завдання 2 — Узгодження вмісту та серіалізація
 
-Write tests that verify:
+Напишіть тести, що перевіряють:
 
-1. API returns JSON by default
-2. Date serialization format is consistent (ISO 8601)
-3. Null optional fields are excluded from response (or included — test your chosen behavior)
-4. Response includes correct `Content-Type` header
-5. Invalid JSON in request body returns 400
+1. API повертає JSON за замовчуванням
+2. Формат серіалізації дати є послідовним (ISO 8601)
+3. Null-значення необов'язкових полів виключаються з відповіді (або включаються — протестуйте обрану поведінку)
+4. Відповідь містить правильний заголовок `Content-Type`
+5. Невалідний JSON у тілі запиту повертає 400
 
-**Minimum test count: 4 tests**
+**Мінімальна кількість тестів: 4 тести**
 
-#### Example: Serialization Test with Shouldly
+#### Приклад: Тест серіалізації з Shouldly
 
 ```csharp
 [Fact]
@@ -303,29 +303,29 @@ public async Task InvalidJson_Returns400Async()
 }
 ```
 
-> **Hint:** To test null-field exclusion, configure `JsonSerializerOptions` in `Program.cs` with `DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull` and verify the JSON body does not contain the null property key.
+> **Підказка:** Для тестування виключення null-полів налаштуйте `JsonSerializerOptions` у `Program.cs` з `DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull` та перевірте, що JSON-тіло не містить ключ null-властивості.
 
-## Grading
+## Оцінювання
 
-| Criteria |
+| Критерії |
 |----------|
-| Task 1 — CRUD + validation tests |
-| Task 2 — Serialization tests |
-| Use of helper methods / base test class |
-| All tests independent and repeatable |
+| Завдання 1 — Тести CRUD + валідації |
+| Завдання 2 — Тести серіалізації |
+| Використання допоміжних методів / базового тестового класу |
+| Усі тести незалежні та відтворювані |
 
-## Submission
+## Здача роботи
 
-- Solution with `Lab4.Api` and `Lab4.Tests` projects
-- Minimum 12 total tests
-- Demonstrate both happy-path and error-path coverage
+- Рішення з проєктами `Lab4.Api` та `Lab4.Tests`
+- Мінімум 12 тестів загалом
+- Продемонструйте покриття як успішних, так і помилкових сценаріїв
 
-## References
+## Посилання
 
-- [Integration tests in ASP.NET Core](https://learn.microsoft.com/en-us/aspnet/core/test/integration-tests) — `WebApplicationFactory` and `HttpClient` patterns
-- [Model Validation in ASP.NET Core](https://learn.microsoft.com/en-us/aspnet/core/mvc/models/validation) — Data Annotations, `ValidationProblemDetails`
-- [Handle errors in ASP.NET Core APIs](https://learn.microsoft.com/en-us/aspnet/core/web-api/handle-errors) — `ProblemDetails`, exception handling
-- [xUnit v3 Documentation](https://xunit.net/docs/getting-started/v3/cmdline) — test framework reference
-- [Shouldly Documentation](https://docs.shouldly.org/) — assertion library API
-- [System.Text.Json in ASP.NET Core](https://learn.microsoft.com/en-us/aspnet/core/web-api/advanced/formatting) — serialization options, content negotiation
-- [FluentValidation Documentation](https://docs.fluentvalidation.net/) — alternative validation library (optional)
+- [Інтеграційні тести в ASP.NET Core](https://learn.microsoft.com/en-us/aspnet/core/test/integration-tests) — шаблони `WebApplicationFactory` та `HttpClient`
+- [Валідація моделей в ASP.NET Core](https://learn.microsoft.com/en-us/aspnet/core/mvc/models/validation) — Data Annotations, `ValidationProblemDetails`
+- [Обробка помилок в API ASP.NET Core](https://learn.microsoft.com/en-us/aspnet/core/web-api/handle-errors) — `ProblemDetails`, обробка винятків
+- [Документація xUnit v3](https://xunit.net/docs/getting-started/v3/cmdline) — довідник тестового фреймворку
+- [Документація Shouldly](https://docs.shouldly.org/) — API бібліотеки перевірок
+- [System.Text.Json в ASP.NET Core](https://learn.microsoft.com/en-us/aspnet/core/web-api/advanced/formatting) — параметри серіалізації, узгодження вмісту
+- [Документація FluentValidation](https://docs.fluentvalidation.net/) — альтернативна бібліотека валідації (необов'язково)
