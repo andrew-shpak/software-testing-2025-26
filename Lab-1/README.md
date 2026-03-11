@@ -105,7 +105,7 @@ public class CalculatorTests
 
 ### Завдання 2 — Утиліти для рядків
 
-Створіть статичний клас `StringUtils` з методами:
+Створіть клас `StringUtils` з методами:
 
 - `string Capitalize(string input)` — робить першу літеру кожного слова великою
 - `string Reverse(string input)` — перевертає рядок
@@ -137,7 +137,7 @@ public class CalculatorTests
 
 ### Завдання 3 — Утиліти для колекцій
 
-Створіть статичний клас `CollectionUtils` з методами:
+Створіть клас `CollectionUtils` з методами:
 
 - `double Average(IEnumerable<double> numbers)` — повертає середнє значення; кидає `InvalidOperationException` для порожньої колекції
 - `T Max<T>(IEnumerable<T> items) where T : IComparable<T>` — повертає максимальний елемент; кидає `InvalidOperationException` для порожньої колекції
