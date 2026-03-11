@@ -502,12 +502,12 @@ docker info
 
 ### 5.4 Як Testcontainers працює під капотом
 
-1. **Image Pull** — Downloads the Docker image if not already cached locally
-2. **Container Start** — Creates and starts a container with a random available port
-3. **Health Check** — Waits until the database inside the container is ready to accept connections
-4. **Connection String** — Exposes the dynamically allocated host port so your tests can connect
-5. **Test Execution** — Your code connects to the container as if it were any database server
-6. **Cleanup** — After tests complete, the container is stopped and removed
+1. **Завантаження образу** — Завантажує Docker-образ, якщо він ще не кешований локально
+2. **Запуск контейнера** — Створює та запускає контейнер з випадковим доступним портом
+3. **Перевірка справності** — Чекає, поки база даних всередині контейнера не буде готова приймати з'єднання
+4. **Рядок з'єднання** — Надає динамічно призначений порт хоста, щоб ваші тести могли підключитися
+5. **Виконання тестів** — Ваш код підключається до контейнера як до будь-якого сервера бази даних
+6. **Очищення** — Після завершення тестів контейнер зупиняється та видаляється
 
 ```
 Timeline:

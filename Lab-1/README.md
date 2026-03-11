@@ -135,12 +135,88 @@ public class CalculatorTests
 
 **Мінімальна кількість тестів:** 12 тестів (3 на метод)
 
+### Завдання 3 — Утиліти для колекцій
+
+Створіть статичний клас `CollectionUtils` з методами:
+
+- `double Average(IEnumerable<double> numbers)` — повертає середнє значення; кидає `InvalidOperationException` для порожньої колекції
+- `T Max<T>(IEnumerable<T> items) where T : IComparable<T>` — повертає максимальний елемент; кидає `InvalidOperationException` для порожньої колекції
+- `IEnumerable<T> Distinct<T>(IEnumerable<T> items)` — повертає унікальні елементи зі збереженням порядку
+- `IEnumerable<IEnumerable<T>> Chunk<T>(IEnumerable<T> items, int size)` — розбиває колекцію на частини заданого розміру; кидає `ArgumentOutOfRangeException` для `size <= 0`
+
+Напишіть тести, що покривають:
+
+1. Звичайні вхідні дані
+2. Порожні колекції (відповідні винятки)
+3. Колекція з одного елемента
+4. `null` вхідні дані (мають кидати `ArgumentNullException`)
+5. Граничні значення (від'ємні числа, великі колекції, розмір частини більший за кількість елементів)
+
+**Очікувана поведінка:**
+
+| Метод | Вхідні дані | Очікуваний результат |
+|--------|-------|-----------------|
+| `Average` | `[1, 2, 3, 4, 5]` | `3.0` |
+| `Average` | `[]` | `InvalidOperationException` |
+| `Max` | `[3, 1, 4, 1, 5]` | `5` |
+| `Max` | `["apple", "cherry", "banana"]` | `"cherry"` |
+| `Distinct` | `[1, 2, 2, 3, 1]` | `[1, 2, 3]` |
+| `Chunk` | `[1, 2, 3, 4, 5], 2` | `[[1, 2], [3, 4], [5]]` |
+| `Chunk` | `[1, 2], 5` | `[[1, 2]]` |
+
+**Підказка:** Використовуйте `[Theory]` з `[MemberData]` для тестів з колекціями, оскільки `[InlineData]` не підтримує масиви.
+
+**Мінімальна кількість тестів:** 10 тестів
+
+## Запуск покриття коду
+
+### 1. Додайте пакет Coverlet
+
+```bash
+dotnet add Lab1.Tests package coverlet.collector
+```
+
+### 2. Запустіть тести зі збором покриття
+
+```bash
+dotnet test --collect:"XPlat Code Coverage" --results-directory ./coverage
+```
+
+### 3. Згенеруйте HTML-звіт
+
+Встановіть ReportGenerator (одноразово):
+
+```bash
+dotnet tool install --global dotnet-reportgenerator-globaltool
+```
+
+Згенеруйте звіт:
+
+```bash
+reportgenerator \
+  -reports:./coverage/**/coverage.cobertura.xml \
+  -targetdir:./coverage/report \
+  -reporttypes:"Html;TextSummary"
+```
+
+### 4. Перегляньте результати
+
+```bash
+# Текстовий підсумок у терміналі
+cat ./coverage/report/Summary.txt
+```
+
+Відкрийте `./coverage/report/index.html` у браузері для детального звіту з посторінковим розбиттям.
+
+> **Примітка:** Додайте `coverage/` до `.gitignore`, щоб не комітити згенеровані звіти.
+
 ## Оцінювання
 
 | Критерії |
 |----------|
 | Завдання 1 — Тести калькулятора |
 | Завдання 2 — Тести утиліт для рядків |
+| Завдання 3 — Тести утиліт для колекцій |
 | Якість тестів (шаблон AAA, описові назви, використання `[Theory]`) |
 | Покриття коду >= 80% |
 
@@ -148,7 +224,7 @@ public class CalculatorTests
 
 - Рішення з проєктами `Lab1.Core` та `Lab1.Tests`
 - Виконайте `dotnet test --collect:"XPlat Code Coverage"` та додайте звіт про покриття
-- Мінімум 20 тестів загалом по всіх завданнях
+- Мінімум 30 тестів загалом по всіх завданнях
 
 ## Посилання
 
