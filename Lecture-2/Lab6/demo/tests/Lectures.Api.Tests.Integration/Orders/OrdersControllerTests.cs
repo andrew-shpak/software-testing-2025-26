@@ -2,32 +2,55 @@ using System.Net;
 using System.Net.Http.Json;
 using Lectures.Api.Orders.Requests;
 using Lectures.Api.Orders.Responses;
-using Microsoft.AspNetCore.Mvc.Testing;
 using Shouldly;
 
 namespace Lectures.Api.Tests.Integration.Orders;
 
-public class OrdersControllerTests : IClassFixture<WebApplicationFactory<Program>>
+public class OrdersControllerTests : IClassFixture<LecturesApiFactory>
 {
-    private readonly HttpClient _client;
+    private readonly LecturesApiFactory _factory;
 
-    public OrdersControllerTests(WebApplicationFactory<Program> factory)
+    public OrdersControllerTests(LecturesApiFactory factory)
     {
-        _client = factory.CreateClient();
+        _factory = factory;
     }
 
     // --- GET /api/orders ---
 
     [Fact]
-    public async Task GetAll_Initially_ReturnsEmptyListAsync()
+    public async Task GetAll_NoOrders_ReturnsEmptyListAsync()
     {
+        // Arrange
+        var client = _factory.CreateIsolatedClient();
+
         // Act
-        var response = await _client.GetAsync("/api/orders");
+        var response = await client.GetAsync("/api/orders");
 
         // Assert
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
         var orders = await response.Content.ReadFromJsonAsync<List<OrderResponse>>();
         orders.ShouldNotBeNull();
+        orders.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task GetAll_AfterCreatingOrders_ReturnsAllAsync()
+    {
+        // Arrange
+        var client = _factory.CreateIsolatedClient();
+        await client.PostAsJsonAsync("/api/orders",
+            new CreateOrderRequest("Alice", "alice@test.com", "Gadget", 1, 10m));
+        await client.PostAsJsonAsync("/api/orders",
+            new CreateOrderRequest("Bob", "bob@test.com", "Widget", 2, 20m));
+
+        // Act
+        var response = await client.GetAsync("/api/orders");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var orders = await response.Content.ReadFromJsonAsync<List<OrderResponse>>();
+        orders.ShouldNotBeNull();
+        orders.Count.ShouldBe(2);
     }
 
     // --- POST /api/orders ---
@@ -36,10 +59,11 @@ public class OrdersControllerTests : IClassFixture<WebApplicationFactory<Program
     public async Task Create_ValidOrder_Returns201WithOrderAsync()
     {
         // Arrange
+        var client = _factory.CreateIsolatedClient();
         var request = new CreateOrderRequest("Alice", "alice@test.com", "Gadget", 2, 25.50m);
 
         // Act
-        var response = await _client.PostAsJsonAsync("/api/orders", request);
+        var response = await client.PostAsJsonAsync("/api/orders", request);
 
         // Assert
         response.StatusCode.ShouldBe(HttpStatusCode.Created);
@@ -52,13 +76,14 @@ public class OrdersControllerTests : IClassFixture<WebApplicationFactory<Program
     }
 
     [Fact]
-    public async Task Create_InvalidOrder_Returns400WithErrorsAsync()
+    public async Task Create_InvalidOrder_Returns400Async()
     {
         // Arrange
+        var client = _factory.CreateIsolatedClient();
         var request = new CreateOrderRequest("", "not-an-email", "", 0, -5m);
 
         // Act
-        var response = await _client.PostAsJsonAsync("/api/orders", request);
+        var response = await client.PostAsJsonAsync("/api/orders", request);
 
         // Assert
         response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
@@ -67,28 +92,33 @@ public class OrdersControllerTests : IClassFixture<WebApplicationFactory<Program
     // --- GET /api/orders/{id} ---
 
     [Fact]
-    public async Task GetById_AfterCreate_ReturnsOrderAsync()
+    public async Task GetById_ExistingOrder_ReturnsOrderAsync()
     {
         // Arrange
-        var createRequest = new CreateOrderRequest("Bob", "bob@test.com", "Gizmo", 1, 100m);
-        var createResponse = await _client.PostAsJsonAsync("/api/orders", createRequest);
+        var client = _factory.CreateIsolatedClient();
+        var createResponse = await client.PostAsJsonAsync("/api/orders",
+            new CreateOrderRequest("Bob", "bob@test.com", "Gizmo", 1, 100m));
         var created = await createResponse.Content.ReadFromJsonAsync<OrderResponse>();
 
         // Act
-        var response = await _client.GetAsync($"/api/orders/{created!.Id}");
+        var response = await client.GetAsync($"/api/orders/{created!.Id}");
 
         // Assert
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
         var order = await response.Content.ReadFromJsonAsync<OrderResponse>();
         order.ShouldNotBeNull();
         order.CustomerName.ShouldBe("Bob");
+        order.ProductName.ShouldBe("Gizmo");
     }
 
     [Fact]
     public async Task GetById_NonExistent_Returns404Async()
     {
+        // Arrange
+        var client = _factory.CreateIsolatedClient();
+
         // Act
-        var response = await _client.GetAsync("/api/orders/99999");
+        var response = await client.GetAsync("/api/orders/99999");
 
         // Assert
         response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
@@ -100,12 +130,13 @@ public class OrdersControllerTests : IClassFixture<WebApplicationFactory<Program
     public async Task UpdateStatus_PendingToConfirmed_Returns200Async()
     {
         // Arrange
-        var createResponse = await _client.PostAsJsonAsync("/api/orders",
+        var client = _factory.CreateIsolatedClient();
+        var createResponse = await client.PostAsJsonAsync("/api/orders",
             new CreateOrderRequest("Carol", "carol@test.com", "Thing", 3, 15m));
         var created = await createResponse.Content.ReadFromJsonAsync<OrderResponse>();
 
         // Act
-        var response = await _client.PutAsJsonAsync(
+        var response = await client.PutAsJsonAsync(
             $"/api/orders/{created!.Id}/status",
             new UpdateOrderStatusRequest(OrderStatusDto.Confirmed));
 
@@ -118,8 +149,11 @@ public class OrdersControllerTests : IClassFixture<WebApplicationFactory<Program
     [Fact]
     public async Task UpdateStatus_NonExistent_Returns404Async()
     {
+        // Arrange
+        var client = _factory.CreateIsolatedClient();
+
         // Act
-        var response = await _client.PutAsJsonAsync(
+        var response = await client.PutAsJsonAsync(
             "/api/orders/99999/status",
             new UpdateOrderStatusRequest(OrderStatusDto.Confirmed));
 
@@ -133,22 +167,43 @@ public class OrdersControllerTests : IClassFixture<WebApplicationFactory<Program
     public async Task Delete_ExistingOrder_Returns204Async()
     {
         // Arrange
-        var createResponse = await _client.PostAsJsonAsync("/api/orders",
+        var client = _factory.CreateIsolatedClient();
+        var createResponse = await client.PostAsJsonAsync("/api/orders",
             new CreateOrderRequest("Dave", "dave@test.com", "Doohickey", 1, 5m));
         var created = await createResponse.Content.ReadFromJsonAsync<OrderResponse>();
 
         // Act
-        var response = await _client.DeleteAsync($"/api/orders/{created!.Id}");
+        var response = await client.DeleteAsync($"/api/orders/{created!.Id}");
 
         // Assert
         response.StatusCode.ShouldBe(HttpStatusCode.NoContent);
     }
 
     [Fact]
+    public async Task Delete_ExistingOrder_RemovesFromGetByIdAsync()
+    {
+        // Arrange
+        var client = _factory.CreateIsolatedClient();
+        var createResponse = await client.PostAsJsonAsync("/api/orders",
+            new CreateOrderRequest("Eve", "eve@test.com", "Item", 1, 10m));
+        var created = await createResponse.Content.ReadFromJsonAsync<OrderResponse>();
+        await client.DeleteAsync($"/api/orders/{created!.Id}");
+
+        // Act
+        var response = await client.GetAsync($"/api/orders/{created.Id}");
+
+        // Assert
+        response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
     public async Task Delete_NonExistent_Returns404Async()
     {
+        // Arrange
+        var client = _factory.CreateIsolatedClient();
+
         // Act
-        var response = await _client.DeleteAsync("/api/orders/99999");
+        var response = await client.DeleteAsync("/api/orders/99999");
 
         // Assert
         response.StatusCode.ShouldBe(HttpStatusCode.NotFound);

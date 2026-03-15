@@ -1,3 +1,4 @@
+using Lectures.Api.Orders.Mappers;
 using Lectures.Api.Orders.Requests;
 using Lectures.Api.Orders.Responses;
 using Lectures.Api.Domain;
@@ -15,6 +16,7 @@ public interface IOrderService
 
 public class OrderService(TimeProvider timeProvider) : IOrderService
 {
+    private static readonly OrderMapper Mapper = new();
     private readonly List<Order> _orders = [];
     private int _nextId = 1;
 
@@ -23,12 +25,12 @@ public class OrderService(TimeProvider timeProvider) : IOrderService
         var order = _orders.SingleOrDefault(o => o.Id == id)
             ?? throw new KeyNotFoundException($"Order {id} not found.");
 
-        return Task.FromResult(ToResponse(order));
+        return Task.FromResult(Mapper.FromEntity(order));
     }
 
     public Task<IReadOnlyList<OrderResponse>> GetAllAsync()
     {
-        var result = _orders.Select(ToResponse).ToList();
+        var result = _orders.Select(Mapper.FromEntity).ToList();
         return Task.FromResult<IReadOnlyList<OrderResponse>>(result);
     }
 
@@ -47,7 +49,7 @@ public class OrderService(TimeProvider timeProvider) : IOrderService
         };
 
         _orders.Add(order);
-        return Task.FromResult(ToResponse(order));
+        return Task.FromResult(Mapper.FromEntity(order));
     }
 
     public Task<OrderResponse> UpdateStatusAsync(int id, UpdateOrderStatusRequest request)
@@ -64,7 +66,7 @@ public class OrderService(TimeProvider timeProvider) : IOrderService
             throw new InvalidOperationException("Shipped orders can only remain shipped.");
 
         order.Status = newStatus;
-        return Task.FromResult(ToResponse(order));
+        return Task.FromResult(Mapper.FromEntity(order));
     }
 
     public Task<bool> DeleteAsync(int id)
@@ -79,15 +81,4 @@ public class OrderService(TimeProvider timeProvider) : IOrderService
         _orders.Remove(order);
         return Task.FromResult(true);
     }
-
-    private static OrderResponse ToResponse(Order order) => new(
-        order.Id,
-        order.CustomerName,
-        order.CustomerEmail,
-        order.ProductName,
-        order.Quantity,
-        order.UnitPrice,
-        order.TotalPrice,
-        order.Status.ToString(),
-        order.CreatedAt);
 }
