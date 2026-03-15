@@ -1,0 +1,20 @@
+name: Branch Name Check
+
+on:
+  push:
+    branches-ignore:
+      - main
+
+jobs:
+  branch-name:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check branch name
+        run: |
+          BRANCH="${GITHUB_REF_NAME}"
+          PATTERN="^(feature|fix)/.+$"
+          if [[ ! "$BRANCH" =~ $PATTERN ]]; then
+            echo "::error::Branch name '$BRANCH' does not match required pattern: feature/* or fix/*"
+            exit 1
+          fi
+          echo "Branch name '$BRANCH' is valid."
