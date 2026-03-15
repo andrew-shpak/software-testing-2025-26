@@ -5,7 +5,7 @@ using Lectures.Api.Orders.Responses;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Shouldly;
 
-namespace Lectures.Api.Tests.Orders;
+namespace Lectures.Api.Tests.Integration.Orders;
 
 public class OrdersControllerTests : IClassFixture<WebApplicationFactory<Program>>
 {
