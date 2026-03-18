@@ -1,0 +1,17 @@
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+WORKDIR /src
+
+COPY src/Lectures.Api/Lectures.Api.csproj src/Lectures.Api/
+RUN dotnet restore src/Lectures.Api/Lectures.Api.csproj
+
+COPY src/Lectures.Api/ src/Lectures.Api/
+RUN dotnet publish src/Lectures.Api/Lectures.Api.csproj -c Release -o /app/publish
+
+FROM mcr.microsoft.com/dotnet/aspnet:10.0
+WORKDIR /app
+COPY --from=build /app/publish .
+
+ENV ASPNETCORE_URLS=http://+:8080
+EXPOSE 8080
+
+ENTRYPOINT ["dotnet", "Lectures.Api.dll"]

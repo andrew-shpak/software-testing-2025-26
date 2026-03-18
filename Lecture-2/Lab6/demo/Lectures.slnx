@@ -3,6 +3,7 @@
     <Project Path="src/Lectures.Api/Lectures.Api.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/Lectures.Api.Tests.BlackBox/Lectures.Api.Tests.BlackBox.csproj" />
     <Project Path="tests/Lectures.Api.Tests.Integration/Lectures.Api.Tests.Integration.csproj" />
     <Project Path="tests/Lectures.Api.Tests/Lectures.Api.Tests.csproj" />
   </Folder>

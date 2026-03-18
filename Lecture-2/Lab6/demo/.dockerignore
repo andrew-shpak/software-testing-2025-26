@@ -1,0 +1,11 @@
+**/bin/
+**/obj/
+**/node_modules/
+**/.git/
+**/.vs/
+**/.idea/
+**/TestResults/
+*.md
+.gitignore
+tests/
+demo/

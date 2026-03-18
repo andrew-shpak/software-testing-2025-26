@@ -14,9 +14,28 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 builder.Services.AddScoped<IOrderService, OrderService>();
 builder.Services.AddValidatorsFromAssemblyContaining<Program>();
 
+builder.Services.AddHealthChecks()
+    .AddDbContextCheck<AppDbContext>("database");
+
 var app = builder.Build();
 
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    await db.Database.EnsureCreatedAsync();
+}
+
 app.MapControllers();
+
+app.MapHealthChecks("/health/live", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    Predicate = _ => false // no checks — just confirms the app is running
+});
+
+app.MapHealthChecks("/health/ready", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    Predicate = _ => true // runs all registered checks (DB, etc.)
+});
 
 app.Run();
 
