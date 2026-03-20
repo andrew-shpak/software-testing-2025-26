@@ -1,0 +1,23 @@
+## .NET
+bin/
+obj/
+*.user
+*.suo
+*.cache
+*.dll
+*.exe
+*.pdb
+
+## IDE
+.vs/
+.vscode/
+.idea/
+*.swp
+
+## Test results
+TestResults/
+coverage/
+
+## OS
+.DS_Store
+Thumbs.db
