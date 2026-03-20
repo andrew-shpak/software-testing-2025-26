@@ -1,0 +1,86 @@
+name: Migration
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'Lecture-2/Lab6/demo/src/Lectures.Api/**'
+
+jobs:
+  validate-migrations:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: lectures
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+      rabbitmq:
+        image: rabbitmq:4-management
+        env:
+          RABBITMQ_DEFAULT_USER: guest
+          RABBITMQ_DEFAULT_PASS: guest
+        ports:
+          - 5672:5672
+          - 15672:15672
+        options: >-
+          --health-cmd="rabbitmq-diagnostics -q ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    defaults:
+      run:
+        working-directory: Lecture-2/Lab6/demo
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Install EF Core tools
+        run: dotnet tool install --global dotnet-ef
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --no-restore
+
+      - name: Check for pending model changes
+        run: dotnet ef migrations has-pending-model-changes --project src/Lectures.Api --startup-project src/Lectures.Api
+
+      - name: Apply migrations
+        env:
+          ConnectionStrings__DefaultConnection: "Host=localhost;Port=5432;Database=lectures;Username=postgres;Password=postgres"
+          RabbitMq__Host: localhost
+          RabbitMq__Port: "5672"
+          RabbitMq__Username: guest
+          RabbitMq__Password: guest
+        run: dotnet ef database update --project src/Lectures.Api --startup-project src/Lectures.Api
+
+      - name: Test RabbitMQ connectivity
+        run: curl -f http://localhost:15672/api/health/checks/alarms -u guest:guest
+
+      - name: Generate idempotent SQL script
+        run: dotnet ef migrations script --idempotent --project src/Lectures.Api --startup-project src/Lectures.Api --output migrations.sql
+
+      - name: Upload migration script
+        uses: actions/upload-artifact@v4
+        with:
+          name: migration-sql
+          path: Lecture-2/Lab6/demo/migrations.sql
