@@ -1,1579 +1,990 @@
-# Лекція 7: CI/CD та управління тестуванням
+# Лекція 7: Наскрізне тестування (E2E)
 
 ## Навчальні цілі
 
 Після завершення цієї лекції студенти зможуть:
 
-- Define Continuous Integration, Continuous Delivery, and Continuous Deployment
-- Explain why CI/CD is essential for sustainable software testing
-- Write GitHub Actions workflows to build, test, and analyze .NET projects
-- Configure code coverage collection and reporting in CI pipelines
-- Set up branch protection rules and quality gates
-- Describe test management concepts: test plans, defect lifecycle, and metrics
-- Identify and manage flaky tests in CI environments
-- Use Docker and Testcontainers in GitHub Actions for integration tests
+- Explain what end-to-end (E2E) testing is and how it differs from unit and integration testing
+- Describe the testing pyramid and where E2E tests fit within it
+- Set up Playwright for .NET projects
+- Write E2E tests that interact with web applications through a real browser
+- Apply the Page Object Model pattern to organize E2E tests
+- Handle common E2E challenges: waits, flakiness, authentication, and test data
+- Run E2E tests in CI/CD pipelines with GitHub Actions
+- Decide when E2E tests add value vs. when lower-level tests are more appropriate
 
 ---
 
-## 1. Що таке CI/CD і чому це важливо для тестування
+## 1. Що таке наскрізне тестування
 
-### 1.1 Проблема без CI/CD
+### 1.1 Визначення
 
-Уявіть команду з п'яти розробників, що працюють над одним проєктом. Кожен розробник працює в окремій гілці днями або тижнями. Коли вони нарешті намагаються злити:
-
-```
-Developer A ──────────────────────► Merge ──┐
-Developer B ──────────────────────► Merge ──┤
-Developer C ──────────────────────► Merge ──┼──► "Integration Hell"
-Developer D ──────────────────────► Merge ──┤    (conflicts, broken tests,
-Developer E ──────────────────────► Merge ──┘     incompatible changes)
-```
-
-Поширені симптоми:
-- Конфлікти злиття, що потребують днів для вирішення
-- Тести, що проходять локально, але падають при об'єднанні
-- Синдром "У мене на машині працює"
-- Ніхто не знає, чи можна розгортати основну гілку
-- Ручне тестування стає вузьким місцем
-
-### 1.2 Рішення CI/CD
-
-CI/CD автоматизує процес інтеграції коду, запуску тестів та доставки ПЗ:
+End-to-end (E2E) testing verifies that a complete application flow works from the user's perspective. Unlike unit tests (which test isolated functions) or integration tests (which test component interactions), E2E tests exercise the **entire system** — frontend, backend, database, and external services — as a real user would.
 
 ```
-Developer pushes code
-        │
-        ▼
-┌─────────────────────────────────────────────────────────┐
-│  CI/CD Pipeline (automated)                             │
-│                                                         │
-│  ┌───────┐   ┌──────┐   ┌─────────┐   ┌────────────┐  │
-│  │ Build │──►│ Test │──►│ Analyze │──►│   Deploy   │  │
-│  └───────┘   └──────┘   └─────────┘   └────────────┘  │
-│                                                         │
-│  Minutes, not days                                      │
-└─────────────────────────────────────────────────────────┘
-        │
-        ▼
-Fast feedback: pass ✓ or fail ✗
+Testing Levels Comparison:
+
+Unit Test:
+  [Function] → assert result ✓
+
+Integration Test:
+  [Controller] → [Service] → [Database] → assert response ✓
+
+E2E Test:
+  [Browser] → [UI] → [API] → [Service] → [Database]
+      ↑                                        │
+      └────────── assert what user sees ────────┘
 ```
 
-### 1.3 Ключові переваги для тестування
+### 1.2 Піраміда тестування
 
-| Benefit | Description |
+The **testing pyramid** (Mike Cohn, 2009) suggests a distribution of tests:
+
+```
+            ╱╲
+           ╱  ╲          E2E Tests
+          ╱ E2E╲         - Few, slow, expensive
+         ╱──────╲        - Verify critical user journeys
+        ╱        ╲
+       ╱Integration╲     Integration Tests
+      ╱──────────────╲   - Moderate count, moderate speed
+     ╱                ╲  - Verify component interactions
+    ╱   Unit Tests     ╲
+   ╱────────────────────╲ Unit Tests
+  ╱                      ╲ - Many, fast, cheap
+ ╱________________________╲ - Verify individual logic
+```
+
+| Level | Count | Speed | Cost per test | Confidence |
+|---|---|---|---|---|
+| Unit | Thousands | < 1ms | Low | Low (isolated) |
+| Integration | Hundreds | 10-500ms | Medium | Medium |
+| E2E | Tens | 1-30s | High | High (realistic) |
+
+> **Key insight:** E2E tests give the highest confidence that the system works as a user expects, but they are slow and expensive. The pyramid says: **write fewer E2E tests, but make each one count.**
+
+### 1.3 Альтернативні моделі
+
+The classic pyramid has evolved. Modern teams often use:
+
+**Testing Trophy (Kent C. Dodds):**
+```
+        ╱╲         E2E
+       ╱──╲
+      ╱    ╲       Integration (largest)
+     ╱      ╲
+    ╱────────╲
+   ╱          ╲    Unit
+  ╱────────────╲
+ ╱  Static      ╲  Static analysis
+╱────────────────╲
+```
+
+**Testing Honeycomb (Spotify):**
+```
+   ┌─────────────────┐
+   │    E2E (few)     │
+   ├─────────────────┤
+   │  Integration     │  ← largest layer
+   │  (many)          │
+   ├─────────────────┤
+   │  Unit (some)     │
+   └─────────────────┘
+```
+
+The common theme: **integration tests** are the sweet spot, and E2E tests should be used **strategically** for critical paths.
+
+### 1.4 Коли E2E тести додають найбільше цінності
+
+E2E tests are most valuable when they verify:
+
+| Scenario | Example |
 |---|---|
-| **Fast feedback** | Developers know within minutes if their change breaks something |
-| **Consistent environment** | Tests run in the same environment every time |
-| **Automated regression** | Every change is tested against the full test suite |
-| **Quality visibility** | Coverage reports, test trends, and metrics are always available |
-| **Confidence to refactor** | Comprehensive automated tests make refactoring safe |
-| **Shift-left testing** | Defects are caught early, when they are cheapest to fix |
+| **Critical business flows** | User registration → login → purchase → confirmation |
+| **Cross-system integration** | Frontend form → API → database → email service |
+| **Workflows spanning multiple pages** | Multi-step checkout, onboarding wizards |
+| **Authentication & authorization** | Login, role-based access, session management |
+| **Real browser behavior** | JavaScript rendering, CSS layout, responsive design |
 
-> **Discussion (5 min):** Have you ever experienced "integration hell"? How long did it take to resolve? How could CI/CD have helped?
+E2E tests are **less** valuable for:
+- Testing individual form validations (unit test the validator)
+- API response formats (integration test the endpoint)
+- Business logic rules (unit test the service)
+- Database queries (integration test the repository)
 
----
-
-## 2. Концепції CI/CD
-
-### 2.1 Безперервна інтеграція (CI)
-
-**Continuous Integration** is the practice of merging all developers' working copies to a shared mainline **frequently** — at least once per day.
-
-#### Основні принципи
-
-1. **Maintain a single source repository** — all code in one place (e.g., Git)
-2. **Automate the build** — one command to build the entire project
-3. **Make the build self-testing** — automated tests run with every build
-4. **Every commit triggers a build** — no manual intervention needed
-5. **Keep the build fast** — ideally under 10 minutes
-6. **Fix broken builds immediately** — a broken build is the team's top priority
-7. **Everyone can see the results** — build status is visible to the whole team
-
-#### Як CI виглядає на практиці
-
-```
-Developer workflow with CI:
-
-1. Pull latest from main          git pull origin main
-2. Make changes                   (write code + tests)
-3. Run tests locally              dotnet test
-4. Commit and push                git push origin feature-branch
-5. CI server runs automatically   Build → Test → Report
-6. Review results                 Green ✓ → create PR
-                                  Red ✗ → fix and push again
-```
-
-### 2.2 Безперервна доставка vs. Безперервне розгортання
-
-Ці терміни часто плутають. Ось відмінність:
-
-```
-Continuous Integration
-        │
-        ▼
-┌──────────────────┐
-│  Code committed  │
-│  Build + Test    │
-└────────┬─────────┘
-         │
-         ▼
-┌──────────────────┐     ┌──────────────────────────────────────┐
-│ Continuous       │     │ Continuous Deployment                │
-│ Delivery         │     │                                      │
-│                  │     │ Every change that passes all stages  │
-│ Every change is  │     │ is automatically deployed to         │
-│ deployable, but  │     │ production — no manual approval.     │
-│ deployment is a  │     │                                      │
-│ manual decision. │     │ Requires: high test confidence,      │
-│                  │     │ feature flags, monitoring.           │
-└──────────────────┘     └──────────────────────────────────────┘
-```
-
-| Aspect | Continuous Delivery | Continuous Deployment |
-|---|---|---|
-| **Deployment trigger** | Manual approval | Automatic |
-| **Risk tolerance** | Lower | Higher (mitigated by automation) |
-| **Test confidence required** | High | Very high |
-| **Release frequency** | On-demand (daily/weekly) | Every passing commit |
-| **Common in** | Enterprise, regulated industries | SaaS, web applications |
-
-### 2.3 Анатомія конвеєра CI/CD
-
-Типовий конвеєр CI/CD має чотири основні етапи:
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                        CI/CD Pipeline                           │
-│                                                                 │
-│  ┌─────────┐  ┌──────────┐  ┌───────────┐  ┌───────────────┐  │
-│  │  BUILD   │  │   TEST   │  │  ANALYZE  │  │    DEPLOY     │  │
-│  │         │  │          │  │           │  │               │  │
-│  │ Restore  │  │ Unit     │  │ Coverage  │  │ Staging       │  │
-│  │ Compile  │  │ Integr.  │  │ Linting   │  │ Production    │  │
-│  │ Publish  │  │ E2E      │  │ Security  │  │ Smoke tests   │  │
-│  └────┬────┘  └────┬─────┘  └─────┬─────┘  └───────┬───────┘  │
-│       │            │              │                 │           │
-│       ▼            ▼              ▼                 ▼           │
-│    Artifact     Results +      Reports          Running        │
-│    (.dll)       Reports        (HTML)           application     │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-| Stage | Purpose | Tools (in this course) |
-|---|---|---|
-| **Build** | Compile code, restore dependencies | `dotnet restore`, `dotnet build` |
-| **Test** | Run automated tests at all levels | `dotnet test`, xUnit v3 |
-| **Analyze** | Measure quality metrics | Coverlet, ReportGenerator, Roslyn analyzers |
-| **Deploy** | Release to an environment | GitHub Actions deploy steps, Docker |
-
-> **Discussion (5 min):** Which stage do you think fails most often in real projects? Why?
+> **Discussion (5 min):** Think of an application you use daily. What are the 3-5 most critical user journeys you would E2E test?
 
 ---
 
-## 3. Основи GitHub Actions
+## 2. Інструменти для E2E тестування
 
-### 3.1 Що таке GitHub Actions?
+### 2.1 Огляд фреймворків
 
-GitHub Actions — це CI/CD-платформа, вбудована в GitHub. Вона дозволяє автоматизувати робочі процеси безпосередньо з вашого репозиторію.
+| Tool | Language | Browser Engine | Key Feature |
+|---|---|---|---|
+| **Playwright** | C#, JS, Python, Java | Chromium, Firefox, WebKit | Auto-wait, codegen, tracing |
+| Selenium | Many | WebDriver protocol | Oldest, largest ecosystem |
+| Cypress | JavaScript | Chromium only | In-browser execution, time travel |
+| Puppeteer | JavaScript | Chromium only | Chrome DevTools Protocol |
 
-Ключові концепції:
+### 2.2 Чому Playwright
 
-```
-┌─────────────────────────────────────────────────────┐
-│  Workflow (.github/workflows/*.yml)                 │
-│                                                     │
-│  Triggered by: push, pull_request, schedule, etc.   │
-│                                                     │
-│  ┌───────────────────────────────────────────────┐  │
-│  │  Job: build-and-test                          │  │
-│  │  runs-on: ubuntu-latest                       │  │
-│  │                                               │  │
-│  │  ┌─────────┐ ┌─────────┐ ┌────────────────┐  │  │
-│  │  │ Step 1  │ │ Step 2  │ │    Step 3      │  │  │
-│  │  │Checkout │►│ Setup   │►│  Build & Test  │  │  │
-│  │  │  code   │ │  .NET   │ │                │  │  │
-│  │  └─────────┘ └─────────┘ └────────────────┘  │  │
-│  └───────────────────────────────────────────────┘  │
-│                                                     │
-│  ┌───────────────────────────────────────────────┐  │
-│  │  Job: deploy (depends on build-and-test)      │  │
-│  │  ...                                          │  │
-│  └───────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────┘
-```
+For this course, we use **Playwright for .NET** because:
 
-| Concept | Description |
-|---|---|
-| **Workflow** | A YAML file that defines an automated process |
-| **Event/Trigger** | What starts the workflow (push, PR, schedule) |
-| **Job** | A set of steps that run on the same runner |
-| **Step** | A single task — either a shell command or an action |
-| **Action** | A reusable unit of code (e.g., `actions/checkout@v6`) |
-| **Runner** | The virtual machine that executes the job |
-
-### 3.2 Структура файлу робочого процесу
-
-Файли робочих процесів знаходяться в `.github/workflows/` і використовують YAML-синтаксис:
-
-```yaml
-# .github/workflows/ci.yml
-
-name: CI Pipeline                  # Display name in GitHub UI
-
-on:                                # Triggers
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
-
-jobs:                              # One or more jobs
-  build-and-test:                  # Job identifier
-    runs-on: ubuntu-latest         # Runner OS
-
-    steps:                         # Sequential steps
-      - name: Checkout code
-        uses: actions/checkout@v6  # Use a pre-built action
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '10.0.x'
-
-      - name: Restore dependencies
-        run: dotnet restore
-
-      - name: Build
-        run: dotnet build --no-restore --configuration Release
-
-      - name: Run tests
-        run: dotnet test --no-build --configuration Release --verbosity normal
-```
-
-### 3.3 Тригери (події)
-
-GitHub Actions підтримує багато тригерних подій. Найпоширеніші для CI:
-
-```yaml
-on:
-  # Trigger on push to specific branches
-  push:
-    branches: [ main, develop ]
-    paths-ignore:
-      - '**.md'              # Don't trigger on documentation changes
-      - 'docs/**'
-
-  # Trigger on pull requests
-  pull_request:
-    branches: [ main ]
-    types: [ opened, synchronize, reopened ]
-
-  # Scheduled trigger (cron syntax)
-  schedule:
-    - cron: '0 6 * * 1'     # Every Monday at 6:00 AM UTC
-
-  # Manual trigger from GitHub UI
-  workflow_dispatch:
-    inputs:
-      environment:
-        description: 'Target environment'
-        required: true
-        default: 'staging'
-        type: choice
-        options:
-          - staging
-          - production
-```
-
-#### Довідник синтаксису Cron
+1. **Native .NET support** — integrates with xUnit/NUnit, same language as our API
+2. **Auto-wait** — automatically waits for elements to be actionable (no manual `Thread.Sleep`)
+3. **Multi-browser** — tests run on Chromium, Firefox, and WebKit from the same code
+4. **Codegen** — records user actions and generates test code
+5. **Tracing** — captures screenshots, network logs, and DOM snapshots for debugging
+6. **Resilient selectors** — prefers text, role, and test-id selectors over fragile CSS/XPath
 
 ```
-┌───────── minute (0-59)
-│ ┌─────── hour (0-23)
-│ │ ┌───── day of month (1-31)
-│ │ │ ┌─── month (1-12)
-│ │ │ │ ┌─ day of week (0-6, Sunday=0)
-│ │ │ │ │
-* * * * *
+Selenium vs. Playwright Architecture:
 
-Examples:
-'0 6 * * 1'        Every Monday at 6:00 AM
-'0 0 * * *'        Every day at midnight
-'*/15 * * * *'     Every 15 minutes
-'0 8 1 * *'        First day of every month at 8:00 AM
+Selenium:
+  Test → WebDriver Protocol → Browser Driver → Browser
+         (HTTP commands)      (chromedriver)
+
+Playwright:
+  Test → CDP / DevTools Protocol → Browser
+         (WebSocket, direct)
+
+Playwright's direct connection means:
+  - Faster command execution
+  - Better auto-waiting
+  - Access to network interception
+  - Native mobile emulation
 ```
 
-### 3.4 Завдання та кроки
-
-Завдання виконуються паралельно за замовчуванням. Використовуйте `needs` для створення залежностей:
-
-```yaml
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - run: dotnet build
-
-  unit-tests:
-    needs: build                   # Runs after 'build' completes
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - run: dotnet test --filter "Category=Unit"
-
-  integration-tests:
-    needs: build                   # Runs after 'build', parallel with unit-tests
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - run: dotnet test --filter "Category=Integration"
-
-  deploy:
-    needs: [unit-tests, integration-tests]  # Runs after BOTH test jobs pass
-    runs-on: ubuntu-latest
-    steps:
-      - run: echo "Deploying..."
-```
-
-Це створює наступний граф виконання:
-
-```
-              ┌──────────────┐
-              │    build     │
-              └──────┬───────┘
-                     │
-            ┌────────┴────────┐
-            ▼                 ▼
-   ┌──────────────┐  ┌────────────────────┐
-   │  unit-tests  │  │ integration-tests  │
-   └──────┬───────┘  └────────┬───────────┘
-          │                   │
-          └────────┬──────────┘
-                   ▼
-            ┌────────────┐
-            │   deploy   │
-            └────────────┘
-```
-
-### 3.5 Матричні збірки
-
-Матричні збірки дозволяють тестувати на кількох конфігураціях одночасно:
-
-```yaml
-jobs:
-  test:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-        dotnet-version: ['9.0.x', '10.0.x']
-      fail-fast: false           # Continue other matrix jobs if one fails
-
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Setup .NET ${{ matrix.dotnet-version }}
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: ${{ matrix.dotnet-version }}
-
-      - name: Run tests
-        run: dotnet test --verbosity normal
-```
-
-This creates **6 parallel jobs** (3 OS x 2 .NET versions):
-
-```
-┌──────────────────────────────────────────────────────────┐
-│  Matrix: 3 OS × 2 .NET versions = 6 jobs                │
-│                                                          │
-│  ubuntu  + .NET 9   │  windows + .NET 9   │  macos + .NET 9 │
-│  ubuntu  + .NET 10  │  windows + .NET 10  │  macos + .NET 10│
-└──────────────────────────────────────────────────────────┘
-```
-
-Ви також можете виключити конкретні комбінації:
-
-```yaml
-strategy:
-  matrix:
-    os: [ubuntu-latest, windows-latest, macos-latest]
-    dotnet-version: ['9.0.x', '10.0.x']
-    exclude:
-      - os: macos-latest
-        dotnet-version: '9.0.x'    # Skip .NET 10 on macOS
-```
-
-### 3.6 Кешування NuGet-пакетів
-
-Кешування прискорює збірки шляхом повторного використання завантажених залежностей:
-
-```yaml
-steps:
-  - uses: actions/checkout@v6
-
-  - name: Setup .NET
-    uses: actions/setup-dotnet@v4
-    with:
-      dotnet-version: '10.0.x'
-
-  - name: Cache NuGet packages
-    uses: actions/cache@v5
-    with:
-      path: ~/.nuget/packages
-      key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
-      restore-keys: |
-        ${{ runner.os }}-nuget-
-
-  - name: Restore dependencies
-    run: dotnet restore
-
-  - name: Build
-    run: dotnet build --no-restore
-```
-
-Як працює кешування:
-
-```
-First run:                           Subsequent runs:
-┌─────────────────────┐              ┌─────────────────────┐
-│ Cache miss          │              │ Cache hit            │
-│                     │              │                      │
-│ dotnet restore      │              │ Restore from cache   │
-│ (downloads ~200MB)  │              │ (~3 seconds)         │
-│ Takes: ~45 seconds  │              │                      │
-│                     │              │ dotnet restore       │
-│ Save to cache       │              │ (nothing to do)      │
-└─────────────────────┘              └──────────────────────┘
-```
-
-The cache key uses `hashFiles('**/*.csproj')` so the cache is invalidated whenever project dependencies change.
-
-### 3.7 Артефакти
-
-Артефакти дозволяють зберігати дані з запуску робочого процесу — такі як результати тестів, звіти покриття або результати збірки:
-
-```yaml
-steps:
-  - name: Run tests with results
-    run: dotnet test --logger "trx;LogFileName=test-results.trx" --results-directory ./test-results
-
-  - name: Upload test results
-    uses: actions/upload-artifact@v4
-    if: always()                    # Upload even if tests fail
-    with:
-      name: test-results
-      path: ./test-results/*.trx
-      retention-days: 30            # Keep for 30 days
-
-  - name: Upload build output
-    uses: actions/upload-artifact@v4
-    with:
-      name: build-artifacts
-      path: |
-        src/**/bin/Release/**
-        !src/**/obj/**
-```
-
-Артефакти можна завантажити з UI GitHub Actions або використати в наступних завданнях:
-
-```yaml
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - run: dotnet publish -c Release -o ./publish
-      - uses: actions/upload-artifact@v4
-        with:
-          name: app
-          path: ./publish
-
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: app
-          path: ./app
-      - run: echo "Deploying from ./app"
-```
-
-> **Discussion (5 min):** What artifacts would be most useful for your team to keep from each CI run? How long should they be retained?
-
----
-
-## 4. Запуск .NET тестів у GitHub Actions
-
-### 4.1 Базовий робочий процес тестування .NET
-
-Ось повний, готовий до продакшну робочий процес для .NET-проєкту:
-
-```yaml
-# .github/workflows/dotnet-ci.yml
-
-name: .NET CI
-
-on:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
-
-env:
-  DOTNET_VERSION: '9.0.x'
-  DOTNET_NOLOGO: true                  # Suppress .NET welcome message
-  DOTNET_CLI_TELEMETRY_OPTOUT: true    # Disable telemetry
-
-jobs:
-  build-and-test:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
-
-      - name: Setup .NET ${{ env.DOTNET_VERSION }}
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
-
-      - name: Cache NuGet packages
-        uses: actions/cache@v5
-        with:
-          path: ~/.nuget/packages
-          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
-          restore-keys: |
-            ${{ runner.os }}-nuget-
-
-      - name: Restore dependencies
-        run: dotnet restore
-
-      - name: Build
-        run: dotnet build --no-restore --configuration Release
-
-      - name: Run tests
-        run: >
-          dotnet test
-          --no-build
-          --configuration Release
-          --verbosity normal
-          --logger "trx;LogFileName=test-results.trx"
-          --results-directory ./test-results
-
-      - name: Upload test results
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: test-results
-          path: ./test-results/**/*.trx
-```
-
-### 4.2 Розуміння виводу тестів у CI
-
-Коли тести виконуються в CI, вивід з'являється в логах робочого процесу:
-
-```
-Run dotnet test --no-build --configuration Release --verbosity normal
-
-  Determining projects to restore...
-  All projects are up-to-date for restore.
-  Calculator -> /home/runner/work/project/src/Calculator/bin/Release/net10.0/Calculator.dll
-  Calculator.Tests -> /home/runner/work/project/tests/Calculator.Tests/bin/Release/net10.0/Calculator.Tests.dll
-
-  Starting test execution...
-  Passed   Add_TwoPositiveNumbers_ReturnsCorrectSum [3ms]
-  Passed   Subtract_LargerFromSmaller_ReturnsNegative [< 1ms]
-  Passed   Divide_ByZero_ThrowsDivideByZeroException [1ms]
-  Passed   IsEven_GivenNumber_ReturnsExpectedResult(number: 2, expected: True) [< 1ms]
-  Passed   IsEven_GivenNumber_ReturnsExpectedResult(number: 3, expected: False) [< 1ms]
-
-  Test Run Successful.
-  Total tests: 5
-       Passed: 5
-  Total time: 1.234 Seconds
-```
-
-### 4.3 Фільтрація тестів за категорією
-
-Ви можете запускати різні категорії тестів в окремих завданнях за допомогою traits:
-
-```csharp
-// In your test code, use Traits to categorize tests
-[Fact]
-[Trait("Category", "Unit")]
-public void Add_TwoNumbers_ReturnsSum() { ... }
-
-[Fact]
-[Trait("Category", "Integration")]
-public async Task GetOrder_ExistingId_ReturnsOrderAsync() { ... }
-```
-
-```yaml
-# In your workflow
-jobs:
-  unit-tests:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '10.0.x'
-      - run: dotnet test --filter "Category=Unit" --verbosity normal
-
-  integration-tests:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '10.0.x'
-      - run: dotnet test --filter "Category=Integration" --verbosity normal
-```
-
----
-
-## 5. Покриття коду в CI
-
-### 5.1 Навіщо вимірювати покриття в CI?
-
-Покриття коду, виміряне локально, корисне, але вимірювання в CI забезпечує:
-
-- **Consistent baseline** — everyone's coverage is measured the same way
-- **Trend tracking** — see coverage change over time
-- **Quality gates** — block merges if coverage drops below a threshold
-- **Visibility** — coverage reports available to the whole team
-
-### 5.2 Coverlet + ReportGenerator у GitHub Actions
-
-#### Step 1: Add Coverlet to Your Test Project
+### 2.3 Встановлення Playwright для .NET
 
 ```bash
-dotnet add <TestProject> package coverlet.collector
+# Create a new test project
+dotnet new nunit -n MyApp.E2E.Tests
+cd MyApp.E2E.Tests
+
+# Add Playwright
+dotnet add package Microsoft.Playwright.NUnit
+
+# Build and install browsers
+dotnet build
+pwsh bin/Debug/net8.0/playwright.ps1 install
 ```
 
-#### Step 2: Workflow with Coverage Collection
+> **Note:** Playwright requires PowerShell (`pwsh`) for browser installation. On macOS/Linux, install it via `dotnet tool install --global PowerShell` if not available.
 
-```yaml
-# .github/workflows/ci-with-coverage.yml
-
-name: CI with Coverage
-
-on:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
-
-env:
-  DOTNET_VERSION: '9.0.x'
-
-jobs:
-  build-test-coverage:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
-
-      - name: Cache NuGet packages
-        uses: actions/cache@v5
-        with:
-          path: ~/.nuget/packages
-          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
-          restore-keys: |
-            ${{ runner.os }}-nuget-
-
-      - name: Restore dependencies
-        run: dotnet restore
-
-      - name: Build
-        run: dotnet build --no-restore --configuration Release
-
-      - name: Run tests with coverage
-        run: >
-          dotnet test
-          --no-build
-          --configuration Release
-          --verbosity normal
-          --collect:"XPlat Code Coverage"
-          --results-directory ./coverage
-
-      - name: Install ReportGenerator
-        run: dotnet tool install --global dotnet-reportgenerator-globaltool
-
-      - name: Generate coverage report
-        run: >
-          reportgenerator
-          -reports:./coverage/**/coverage.cobertura.xml
-          -targetdir:./coverage/report
-          -reporttypes:"Html;TextSummary;Cobertura"
-
-      - name: Display coverage summary
-        run: cat ./coverage/report/Summary.txt
-
-      - name: Upload coverage report
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-report
-          path: ./coverage/report/
-          retention-days: 14
+Project structure:
 ```
-
-### 5.3 Вивід підсумку покриття
-
-The `Summary.txt` output looks like this in the CI logs:
-
-```
-Summary
-  Generated on: 3/9/2026
-  Parser:       Cobertura
-  Assemblies:   2
-  Classes:      8
-  Files:        8
-  Line coverage:    87.3%
-  Branch coverage:  72.1%
-  Method coverage:  91.4%
-
-  +-----------------------+--------+--------+--------+
-  | Assembly              | Line   | Branch | Method |
-  +-----------------------+--------+--------+--------+
-  | Calculator            | 92.5%  | 80.0%  | 95.0%  |
-  | EStore                | 82.1%  | 64.2%  | 87.8%  |
-  +-----------------------+--------+--------+--------+
-```
-
-### 5.4 Публікація покриття як коментаря до PR
-
-Ви можете додавати результати покриття безпосередньо в коментарі до pull request для зручного перегляду:
-
-```yaml
-      - name: Add coverage PR comment
-        uses: marocchino/sticky-pull-request-comment@v2
-        if: github.event_name == 'pull_request'
-        with:
-          recreate: true
-          path: ./coverage/report/Summary.txt
-```
-
-Інший підхід використовує спеціалізований action для покриття:
-
-```yaml
-      - name: Code coverage report
-        uses: irongut/CodeCoverageSummary@v1.3.0
-        if: github.event_name == 'pull_request'
-        with:
-          filename: ./coverage/**/coverage.cobertura.xml
-          badge: true
-          format: markdown
-          output: both
-          thresholds: '60 80'      # Yellow at 60%, green at 80%
-
-      - name: Add coverage to PR
-        uses: marocchino/sticky-pull-request-comment@v2
-        if: github.event_name == 'pull_request'
-        with:
-          recreate: true
-          path: code-coverage-results.md
-```
-
-### 5.5 Примусове мінімальне покриття
-
-Ви можете провалити збірку, якщо покриття падає нижче порогу:
-
-```yaml
-      - name: Check coverage threshold
-        run: |
-          COVERAGE=$(grep -oP 'Line coverage:\s+\K[\d.]+' ./coverage/report/Summary.txt)
-          echo "Line coverage: ${COVERAGE}%"
-          THRESHOLD=80
-          if (( $(echo "$COVERAGE < $THRESHOLD" | bc -l) )); then
-            echo "::error::Coverage ${COVERAGE}% is below the threshold of ${THRESHOLD}%"
-            exit 1
-          fi
-          echo "Coverage ${COVERAGE}% meets the threshold of ${THRESHOLD}%"
-```
-
-> **Discussion (5 min):** What is a reasonable coverage threshold for a project? Should it be the same for all modules? What are the risks of setting it too high or too low?
-
----
-
-## 6. Branch Protection Rules and Required Checks
-
-### 6.1 What Are Branch Protection Rules?
-
-Branch protection rules prevent direct pushes to important branches (like `main`) and require certain conditions before code can be merged.
-
-```
-Without protection:                 With protection:
-
-Anyone can push                     Push blocked unless:
-directly to main                    ✓ CI pipeline passes
-                                    ✓ Code review approved
-           │                        ✓ Coverage threshold met
-           ▼                        ✓ No merge conflicts
-    Risky, unreviewed
-    code in production                     │
-                                           ▼
-                                    Safe, reviewed, tested
-                                    code in production
-```
-
-### 6.2 Configuring Branch Protection in GitHub
-
-Navigate to: **Repository Settings > Branches > Add branch protection rule**
-
-Key settings:
-
-| Setting | Purpose | Recommendation |
-|---|---|---|
-| **Require a pull request before merging** | No direct pushes to protected branch | Always enable for `main` |
-| **Require approvals** | Code review by at least N reviewers | 1-2 approvals minimum |
-| **Dismiss stale approvals** | Re-review required after new commits | Enable |
-| **Require status checks to pass** | CI must pass before merge | Enable; select your CI job |
-| **Require branches to be up to date** | Branch must be current with base | Enable for critical branches |
-| **Require conversation resolution** | All PR comments must be resolved | Recommended |
-| **Include administrators** | Rules apply to admins too | Recommended for production |
-
-### 6.3 Required Status Checks
-
-When you enable "Require status checks to pass," you select which GitHub Actions jobs must succeed:
-
-```yaml
-# The job name becomes the status check name
-jobs:
-  build-and-test:          # ← This name appears in branch protection settings
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - run: dotnet test
-```
-
-```
-Pull Request:
-
-  ✓ build-and-test         Passed
-  ✓ coverage-check         Passed — 85% coverage
-  ✗ integration-tests      Failed — 2 tests failed    ← Blocks merge
-  ○ deploy-staging         Skipped (waiting on tests)
-
-  [Merge pull request]  ← Button is disabled until all checks pass
-```
-
-### 6.4 Rulesets (Modern Approach)
-
-GitHub now offers **Rulesets** as a more flexible alternative to branch protection rules. Rulesets support:
-
-- Targeting multiple branches with patterns (e.g., `release/*`)
-- Organization-level rules that apply across repositories
-- Tag protection
-- Bypass lists for specific users or teams
-
-```
-Repository Settings > Rules > Rulesets > New ruleset
-
-Target: branches matching "main", "release/*"
-Rules:
-  ✓ Require pull request
-  ✓ Require status checks: "build-and-test"
-  ✓ Block force pushes
-  ✓ Require linear history
+MyApp.E2E.Tests/
+├── MyApp.E2E.Tests.csproj
+├── Pages/                    # Page Object Models
+│   ├── LoginPage.cs
+│   ├── DashboardPage.cs
+│   └── OrderPage.cs
+├── Tests/
+│   ├── AuthenticationTests.cs
+│   ├── OrderFlowTests.cs
+│   └── NavigationTests.cs
+├── Fixtures/                 # Test setup and shared state
+│   └── TestFixture.cs
+└── playwright.config.cs      # (optional) configuration
 ```
 
 ---
 
-## 7. Test Management Concepts
+## 3. Перший E2E тест з Playwright
 
-### 7.1 Test Plans and Test Strategies
-
-A **test strategy** defines the overall approach to testing for a project. A **test plan** is a concrete document that describes what, how, when, and who.
-
-#### Test Strategy Components
-
-```
-┌─────────────────────────────────────────────────────────┐
-│  Test Strategy                                          │
-│                                                         │
-│  ┌─────────────┐  ┌──────────────┐  ┌───────────────┐  │
-│  │   Scope &   │  │  Test Levels │  │    Tools &    │  │
-│  │  Objectives │  │  & Types     │  │ Infrastructure│  │
-│  └─────────────┘  └──────────────┘  └───────────────┘  │
-│                                                         │
-│  ┌─────────────┐  ┌──────────────┐  ┌───────────────┐  │
-│  │  Entry/Exit │  │   Risk       │  │  Roles &      │  │
-│  │  Criteria   │  │   Analysis   │  │  Responsibilities│
-│  └─────────────┘  └──────────────┘  └───────────────┘  │
-└─────────────────────────────────────────────────────────┘
-```
-
-#### Test Plan Structure (IEEE 829 Based)
-
-| Section | Content |
-|---|---|
-| **Test plan identifier** | Unique ID and version |
-| **Introduction** | Purpose and scope of testing |
-| **Test items** | What software/features are being tested |
-| **Features to be tested** | Specific features in scope |
-| **Features not to be tested** | Excluded features (with justification) |
-| **Approach** | Testing techniques and methods |
-| **Pass/fail criteria** | What constitutes a pass or fail |
-| **Test environment** | Hardware, software, network requirements |
-| **Schedule** | Timeline and milestones |
-| **Risks and contingencies** | Known risks and mitigation plans |
-
-### 7.2 Test Case Management
-
-A **test case** is a set of conditions and expected results used to verify a specific aspect of the system.
-
-#### Test Case Template
-
-```
-┌────────────────────────────────────────────────────────────────┐
-│ Test Case ID:     TC-LOGIN-001                                 │
-│ Title:            Valid user can log in with correct credentials│
-│ Priority:         High                                         │
-│ Preconditions:    User account exists; user is not locked out  │
-│                                                                │
-│ Steps:                                                         │
-│   1. Navigate to /login                                        │
-│   2. Enter valid email: user@example.com                       │
-│   3. Enter valid password: CorrectPassword123!                 │
-│   4. Click "Sign In" button                                   │
-│                                                                │
-│ Expected Result:  User is redirected to /dashboard             │
-│                   Welcome message displays user's name         │
-│                                                                │
-│ Actual Result:    (filled during execution)                    │
-│ Status:           Pass / Fail / Blocked / Skipped              │
-│ Tested By:        (tester name)                                │
-│ Date:             (execution date)                             │
-└────────────────────────────────────────────────────────────────┘
-```
-
-#### Automated vs. Manual Test Cases
-
-| Characteristic | Automate | Keep Manual |
-|---|---|---|
-| Regression tests | Yes | No |
-| Smoke tests | Yes | No |
-| Data-driven tests | Yes | No |
-| Exploratory testing | No | Yes |
-| Usability testing | No | Yes |
-| Tests run once | No | Yes |
-| Complex UI workflows | Sometimes | Sometimes |
-
-### 7.3 Defect Lifecycle
-
-A defect (bug) follows a lifecycle from discovery to resolution:
-
-```
-┌──────┐    ┌────────┐    ┌──────────┐    ┌────────┐    ┌────────┐
-│ New  │───►│  Open  │───►│ Assigned │───►│ Fixed  │───►│ Closed │
-└──────┘    └────┬───┘    └────┬─────┘    └───┬────┘    └────────┘
-                 │             │              │              ▲
-                 │             │              ▼              │
-                 │             │         ┌─────────┐        │
-                 │             │         │Verified │────────┘
-                 │             │         └────┬────┘
-                 │             │              │
-                 │             ▼              ▼
-                 │      ┌───────────┐   ┌──────────┐
-                 │      │ Deferred  │   │ Reopened │
-                 │      └───────────┘   └──────────┘
-                 │
-                 ▼
-           ┌───────────┐
-           │ Rejected  │  (not a bug / duplicate / by design)
-           └───────────┘
-```
-
-#### Defect Report Fields
-
-| Field | Description | Example |
-|---|---|---|
-| **ID** | Unique identifier | BUG-1234 |
-| **Title** | Short, descriptive summary | "Login fails for emails with '+' character" |
-| **Severity** | Technical impact | Critical / Major / Minor / Trivial |
-| **Priority** | Business urgency | P1 (urgent) / P2 (high) / P3 (normal) / P4 (low) |
-| **Steps to reproduce** | Exact steps to trigger the bug | 1. Go to /login 2. Enter user+tag@mail.com... |
-| **Expected result** | What should happen | User is logged in successfully |
-| **Actual result** | What actually happens | Error: "Invalid email format" |
-| **Environment** | Where it was found | Chrome 120, Ubuntu 22.04, .NET 10 |
-| **Attachments** | Screenshots, logs, videos | screenshot.png, error.log |
-
-> **Discussion (5 min):** What is the difference between severity and priority? Can a trivial bug have high priority? Can a critical bug have low priority? Give examples.
-
-### 7.4 Test Reporting and Metrics
-
-#### Key Testing Metrics
-
-| Metric | Formula | What It Tells You |
-|---|---|---|
-| **Test pass rate** | Passed / Total tests | Overall quality signal |
-| **Defect density** | Defects / KLOC (thousands of lines of code) | Code quality by module |
-| **Defect detection rate** | Defects found in testing / Total defects | Testing effectiveness |
-| **Test coverage** | Lines covered / Total lines | How much code is exercised |
-| **Mean time to detect (MTTD)** | Average time from introduction to discovery | Speed of feedback |
-| **Mean time to resolve (MTTR)** | Average time from detection to fix | Team responsiveness |
-| **Escaped defects** | Defects found in production | Testing gaps |
-| **Flaky test rate** | Flaky tests / Total tests | CI reliability |
-
-#### Test Dashboard Example
-
-```
-┌──────────────────────────────────────────────────────────┐
-│  Test Dashboard — Sprint 14                              │
-│                                                          │
-│  Test Execution          Coverage           Defects      │
-│  ┌──────────────┐        ┌────────────┐     ┌─────────┐ │
-│  │ Total:  342  │        │ Line: 87%  │     │ Open: 12│ │
-│  │ Pass:   331  │        │ Branch:72% │     │ Fixed: 8│ │
-│  │ Fail:     8  │        │ Method:91% │     │ New:   5│ │
-│  │ Skip:     3  │        └────────────┘     └─────────┘ │
-│  │ Rate: 96.8%  │                                        │
-│  └──────────────┘        Build Health                    │
-│                          ┌────────────────────────────┐  │
-│  Flaky Tests: 4 (1.2%)   │ Last 30 builds: 27 green  │  │
-│                          │                 3 red      │  │
-│                          │ Success rate: 90%          │  │
-│                          └────────────────────────────┘  │
-└──────────────────────────────────────────────────────────┘
-```
-
-### 7.5 Risk-Based Testing
-
-Not all features carry the same risk. Risk-based testing prioritizes testing effort based on the **likelihood** and **impact** of failure.
-
-#### Risk Matrix
-
-```
-                    Impact
-                Low      Medium     High
-           ┌─────────┬──────────┬──────────┐
-  High     │ Medium  │   High   │ Critical │
-           │         │          │          │
-Likelihood ├─────────┼──────────┼──────────┤
-  Medium   │  Low    │  Medium  │   High   │
-           │         │          │          │
-           ├─────────┼──────────┼──────────┤
-  Low      │  Low    │   Low    │  Medium  │
-           │         │          │          │
-           └─────────┴──────────┴──────────┘
-```
-
-| Risk Level | Testing Approach |
-|---|---|
-| **Critical** | Extensive automated tests, manual exploratory testing, performance testing |
-| **High** | Comprehensive automated tests, targeted manual testing |
-| **Medium** | Standard automated test coverage |
-| **Low** | Basic smoke tests, rely on automated regression |
-
-#### Example: E-Commerce Application
-
-| Feature | Likelihood of Failure | Impact of Failure | Risk | Testing Effort |
-|---|---|---|---|---|
-| Payment processing | Medium | Critical | **Critical** | Full coverage + E2E + load tests |
-| User registration | Low | High | **Medium** | Unit + integration tests |
-| Product search | Medium | Medium | **Medium** | Unit + basic E2E |
-| Admin dashboard | Low | Low | **Low** | Basic smoke tests |
-
-> **Discussion (10 min):** For a healthcare appointment booking system, how would you classify the risk of these features: booking an appointment, canceling an appointment, viewing medical records, changing the UI theme? How would this affect your testing strategy?
-
----
-
-## 8. Quality Gates
-
-### 8.1 What is a Quality Gate?
-
-A **quality gate** is a set of conditions that must be met before code can progress to the next stage (e.g., from development to staging, or from staging to production).
-
-```
-Code change
-     │
-     ▼
-┌──────────────────┐     ┌──────────────────┐     ┌──────────────┐
-│  Gate 1: Merge   │     │  Gate 2: Deploy  │     │  Gate 3:     │
-│  to main         │     │  to staging      │     │  Production  │
-│                  │     │                  │     │              │
-│  ✓ Tests pass    │     │  ✓ Gate 1 passed │     │  ✓ Gate 2    │
-│  ✓ Coverage ≥80% │────►│  ✓ E2E tests     │────►│  ✓ Smoke     │
-│  ✓ No critical   │     │  ✓ Performance   │     │    tests     │
-│    issues        │     │    benchmarks    │     │  ✓ Manual    │
-│  ✓ Code review   │     │  ✓ Security scan │     │    approval  │
-│    approved      │     │                  │     │              │
-└──────────────────┘     └──────────────────┘     └──────────────┘
-```
-
-### 8.2 Common Quality Gate Criteria
-
-| Gate | Criteria | Implementation |
-|---|---|---|
-| **PR merge** | All tests pass | GitHub Actions required status checks |
-| **PR merge** | Code coverage above threshold | Coverlet + coverage check step |
-| **PR merge** | No new critical/high issues | Static analysis (Roslyn, SonarCloud) |
-| **PR merge** | Code review approved | Branch protection: require approvals |
-| **Staging deploy** | All integration tests pass | E2E test job in pipeline |
-| **Staging deploy** | Performance within acceptable range | Benchmark comparison step |
-| **Production deploy** | Manual approval by designated reviewer | GitHub Environments with reviewers |
-| **Production deploy** | Smoke tests pass on staging | Automated smoke test job |
-
-### 8.3 Implementing Quality Gates in GitHub Actions
-
-#### Using GitHub Environments for Deployment Approval
-
-```yaml
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - run: dotnet test
-
-  deploy-staging:
-    needs: test
-    runs-on: ubuntu-latest
-    environment: staging               # Links to GitHub environment
-    steps:
-      - run: echo "Deploying to staging..."
-
-  deploy-production:
-    needs: deploy-staging
-    runs-on: ubuntu-latest
-    environment: production            # Requires manual approval
-    steps:
-      - run: echo "Deploying to production..."
-```
-
-Configure approval in: **Repository Settings > Environments > production > Required reviewers**
-
----
-
-## 9. Flaky Test Detection and Management
-
-### 9.1 What Are Flaky Tests?
-
-A **flaky test** is a test that sometimes passes and sometimes fails without any change to the code. Flaky tests are one of the biggest problems in CI/CD.
-
-```
-Same code, same test, different results:
-
-Run 1:  ✓ Pass
-Run 2:  ✗ Fail    ← No code changed!
-Run 3:  ✓ Pass
-Run 4:  ✓ Pass
-Run 5:  ✗ Fail    ← Flaky!
-```
-
-### 9.2 Common Causes of Flaky Tests
-
-| Cause | Example | Fix |
-|---|---|---|
-| **Timing/race conditions** | `await Task.Delay(100)` in test | Use proper synchronization, not delays |
-| **Shared state** | Tests share a database record | Isolate test data; reset state per test |
-| **Test order dependency** | Test B relies on Test A running first | Make each test independent |
-| **Time-dependent logic** | Test checks `DateTime.Now` | Inject a clock abstraction; mock time |
-| **External dependencies** | Test calls a real API | Mock external services |
-| **Resource exhaustion** | Port already in use | Use dynamic ports; clean up resources |
-| **Floating-point precision** | `0.1 + 0.2 == 0.3` | Use tolerance: `result.ShouldBe(0.3, 0.001)` |
-| **Random data** | Test uses `Random` without seed | Use deterministic test data |
-
-### 9.3 Detecting Flaky Tests
-
-#### Strategy 1: Retry on Failure
-
-Configure test retries to identify flaky tests. In xUnit v3, you can use the `[Retry]` attribute (available via extensions) or configure retries at the CI level:
-
-```yaml
-# Retry the entire test step
-- name: Run tests
-  run: dotnet test --verbosity normal
-  continue-on-error: false
-
-# Or use a retry action
-- name: Run tests with retry
-  uses: nick-fields/retry@v3
-  with:
-    max_attempts: 3
-    timeout_minutes: 10
-    command: dotnet test --verbosity normal
-```
-
-#### Strategy 2: Track Test Results Over Time
-
-```yaml
-- name: Run tests with TRX output
-  run: >
-    dotnet test
-    --logger "trx;LogFileName=results.trx"
-    --results-directory ./test-results
-
-# Upload results for trend analysis
-- name: Upload test results
-  uses: actions/upload-artifact@v4
-  if: always()
-  with:
-    name: test-results-${{ github.run_number }}
-    path: ./test-results/
-```
-
-### 9.4 Managing Flaky Tests
-
-A flaky test management process:
-
-```
-Test fails intermittently
-         │
-         ▼
-┌──────────────────────┐
-│ 1. Identify as flaky │──► Log in issue tracker with "flaky" label
-└──────────┬───────────┘
-           │
-           ▼
-┌──────────────────────┐
-│ 2. Quarantine        │──► Move to a separate test suite (optional)
-└──────────┬───────────┘     Don't block the pipeline
-           │
-           ▼
-┌──────────────────────┐
-│ 3. Investigate root  │──► Find the cause (timing, state, resources)
-│    cause             │
-└──────────┬───────────┘
-           │
-           ▼
-┌──────────────────────┐
-│ 4. Fix or remove     │──► Fix the root cause; if not possible,
-└──────────────────────┘     convert to manual test or remove
-```
-
-**Important rule:** Never ignore flaky tests. They erode trust in the CI pipeline. If developers learn to dismiss failures as "probably just a flaky test," real bugs will be missed.
-
-> **Discussion (5 min):** Your CI pipeline has 500 tests and 3% are flaky. Every other build fails due to flaky tests. How would you handle this? Is it ever acceptable to just re-run the pipeline?
-
----
-
-## 10. Environment Management
-
-### 10.1 Common Environments
-
-Software typically progresses through multiple environments before reaching users:
-
-```
-┌────────────┐    ┌────────────┐    ┌────────────┐    ┌──────────────┐
-│   Local    │───►│    Dev     │───►│  Staging   │───►│  Production  │
-│            │    │            │    │            │    │              │
-│ Developer's│    │ Shared dev │    │ Production │    │ Live users   │
-│ machine    │    │ environment│    │ mirror     │    │              │
-│            │    │            │    │            │    │              │
-│ Unit tests │    │ Integration│    │ E2E tests  │    │ Monitoring   │
-│            │    │ tests      │    │ Perf tests │    │ Smoke tests  │
-└────────────┘    └────────────┘    └────────────┘    └──────────────┘
-```
-
-| Environment | Purpose | Data | Testing |
-|---|---|---|---|
-| **Local** | Developer experimentation | Mock/in-memory | Unit tests, quick integration |
-| **Dev** | Integration of all components | Synthetic test data | Integration, API tests |
-| **Staging** | Pre-production validation | Production-like data (anonymized) | E2E, performance, security |
-| **Production** | Live user traffic | Real data | Smoke tests, monitoring |
-
-### 10.2 Environment Variables in GitHub Actions
-
-```yaml
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    environment: staging
-    env:
-      DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
-      API_KEY: ${{ secrets.STAGING_API_KEY }}
-    steps:
-      - name: Deploy
-        run: echo "Deploying to staging"
-        env:
-          DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN }}  # Step-level env var
-```
-
-### 10.3 GitHub Environments
-
-GitHub Environments provide:
-- **Secrets scoped to an environment** (different secrets for staging vs. production)
-- **Protection rules** (required reviewers, wait timers)
-- **Deployment history** (track what was deployed when)
-
-```yaml
-jobs:
-  deploy-staging:
-    runs-on: ubuntu-latest
-    environment:
-      name: staging
-      url: https://staging.myapp.com    # Shows in the GitHub UI
-
-  deploy-production:
-    needs: deploy-staging
-    runs-on: ubuntu-latest
-    environment:
-      name: production
-      url: https://myapp.com
-```
-
----
-
-## 11. Docker in CI for Integration Tests
-
-### 11.1 Why Docker in CI?
-
-Integration tests often need real infrastructure — databases, message queues, caches. Docker provides lightweight, disposable instances of these services.
-
-```
-Without Docker:                      With Docker:
-
-Install SQL Server on runner ✗       Start container in seconds ✓
-Manage state between runs ✗          Fresh instance per run ✓
-Different versions conflict ✗        Any version, isolated ✓
-Works differently on CI vs local ✗   Same container everywhere ✓
-```
-
-### 11.2 Docker Services in GitHub Actions
-
-GitHub Actions can run Docker containers as services alongside your tests:
-
-```yaml
-jobs:
-  integration-tests:
-    runs-on: ubuntu-latest
-
-    services:
-      sqlserver:
-        image: mcr.microsoft.com/mssql/server:2022-latest
-        env:
-          ACCEPT_EULA: Y
-          MSSQL_SA_PASSWORD: YourStr0ng!Password
-        ports:
-          - 1433:1433
-        options: >-
-          --health-cmd "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'YourStr0ng!Password' -C -Q 'SELECT 1'"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: testuser
-          POSTGRES_PASSWORD: testpassword
-          POSTGRES_DB: testdb
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '10.0.x'
-
-      - name: Run integration tests
-        run: dotnet test --filter "Category=Integration" --verbosity normal
-        env:
-          ConnectionStrings__SqlServer: "Server=localhost,1433;Database=testdb;User Id=sa;Password=YourStr0ng!Password;TrustServerCertificate=true"
-          ConnectionStrings__Postgres: "Host=localhost;Port=5432;Database=testdb;Username=testuser;Password=testpassword"
-```
-
-### 11.3 Testcontainers in GitHub Actions
-
-Testcontainers starts Docker containers from within your test code. This works in GitHub Actions because the `ubuntu-latest` runner has Docker pre-installed.
+### 3.1 Базова структура тесту
 
 ```csharp
-// Example test using Testcontainers for SQL Server
-using Testcontainers.MsSql;
+using Microsoft.Playwright.NUnit;
+using Microsoft.Playwright;
 
-public class DatabaseIntegrationTests : IAsyncLifetime
+namespace MyApp.E2E.Tests;
+
+[Parallelizable(ParallelScope.Self)]
+[TestFixture]
+public class HomePageTests : PageTest
 {
-    private readonly MsSqlContainer _sqlContainer = new MsSqlBuilder()
-        .WithImage("mcr.microsoft.com/mssql/server:2022-latest")
-        .Build();
-
-    public async Task InitializeAsync()
+    [Test]
+    public async Task HomePage_ShouldDisplayWelcomeMessage()
     {
-        await _sqlContainer.StartAsync();
+        // Arrange — navigate to the application
+        await Page.GotoAsync("https://localhost:5001");
+
+        // Act — find the heading
+        var heading = Page.GetByRole(AriaRole.Heading, new() { Name = "Welcome" });
+
+        // Assert — verify it's visible
+        await Expect(heading).ToBeVisibleAsync();
     }
 
-    public async Task DisposeAsync()
+    [Test]
+    public async Task HomePage_ShouldHaveCorrectTitle()
     {
-        await _sqlContainer.DisposeAsync();
-    }
+        await Page.GotoAsync("https://localhost:5001");
 
-    [Fact]
-    public async Task CanConnectToDatabase()
-    {
-        var connectionString = _sqlContainer.GetConnectionString();
-        // Use connectionString to run your integration test...
+        await Expect(Page).ToHaveTitleAsync("My Application");
     }
 }
 ```
 
-The corresponding workflow is simpler because Testcontainers manages Docker itself:
+**Key concepts:**
+- `PageTest` base class provides a fresh `Page` (browser tab) for each test
+- `Page.GotoAsync()` navigates to a URL
+- `Page.GetByRole()` finds elements by their accessibility role
+- `Expect()` provides Playwright assertions with auto-retry
 
-```yaml
-jobs:
-  integration-tests:
-    runs-on: ubuntu-latest
+### 3.2 Локатори — як знаходити елементи
 
-    steps:
-      - uses: actions/checkout@v6
+Playwright recommends **user-facing locators** that mirror how users find elements:
 
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '10.0.x'
+```csharp
+// ✅ RECOMMENDED — resilient, user-facing locators
 
-      # Docker is already available on ubuntu-latest
-      # Testcontainers will manage containers automatically
+// By role (button, link, heading, textbox, etc.)
+Page.GetByRole(AriaRole.Button, new() { Name = "Submit" });
+Page.GetByRole(AriaRole.Link, new() { Name = "Sign up" });
+Page.GetByRole(AriaRole.Heading, new() { Level = 1 });
 
-      - name: Run integration tests
-        run: dotnet test --filter "Category=Integration" --verbosity normal
+// By label (form fields)
+Page.GetByLabel("Email address");
+Page.GetByLabel("Password");
+
+// By placeholder
+Page.GetByPlaceholder("Enter your email");
+
+// By text content
+Page.GetByText("Welcome back");
+Page.GetByText("Order #12345");
+
+// By test ID (when no semantic locator fits)
+Page.GetByTestId("checkout-button");
+// Requires: <button data-testid="checkout-button">Pay</button>
+
+// By alt text (images)
+Page.GetByAltText("Company logo");
 ```
 
-> **Discussion (5 min):** What are the trade-offs between using GitHub Actions services vs. Testcontainers? When would you prefer one approach over the other?
+```csharp
+// ❌ AVOID — fragile locators that break on refactoring
+
+// CSS selectors tied to structure
+Page.Locator("div.container > div:nth-child(3) > button.btn-primary");
+
+// IDs that may change
+Page.Locator("#btn-submit-form-v2");
+
+// XPath
+Page.Locator("//div[@class='header']/nav/ul/li[2]/a");
+
+// Classes used for styling
+Page.Locator(".text-blue-500.font-bold.mt-4");
+```
+
+**Locator priority** (most to least resilient):
+
+```
+1. GetByRole()       — semantic, accessible, rarely changes
+2. GetByLabel()      — tied to form behavior
+3. GetByPlaceholder()— visible to user
+4. GetByText()       — content-based
+5. GetByTestId()     — explicit contract between dev and test
+6. Locator("css")    — last resort, fragile
+```
+
+### 3.3 Дії — взаємодія з елементами
+
+```csharp
+// Clicking
+await Page.GetByRole(AriaRole.Button, new() { Name = "Login" }).ClickAsync();
+await Page.GetByRole(AriaRole.Link, new() { Name = "Dashboard" }).ClickAsync();
+
+// Typing
+await Page.GetByLabel("Username").FillAsync("john@example.com");
+await Page.GetByLabel("Password").FillAsync("secret123");
+
+// Clearing and typing
+await Page.GetByLabel("Search").ClearAsync();
+await Page.GetByLabel("Search").FillAsync("new search term");
+
+// Selecting from dropdown
+await Page.GetByLabel("Country").SelectOptionAsync("UA");
+
+// Checking / unchecking
+await Page.GetByLabel("I agree to terms").CheckAsync();
+await Page.GetByLabel("Subscribe to newsletter").UncheckAsync();
+
+// Pressing keyboard keys
+await Page.GetByLabel("Search").PressAsync("Enter");
+
+// Hovering
+await Page.GetByText("Menu").HoverAsync();
+
+// Uploading files
+await Page.GetByLabel("Upload").SetInputFilesAsync("invoice.pdf");
+```
+
+### 3.4 Assertions — перевірка результатів
+
+Playwright assertions **auto-retry** until the condition is met or timeout expires (default: 5 seconds):
+
+```csharp
+// Page assertions
+await Expect(Page).ToHaveTitleAsync("Dashboard");
+await Expect(Page).ToHaveURLAsync("https://localhost:5001/dashboard");
+await Expect(Page).ToHaveURLAsync(new Regex("/dashboard$"));
+
+// Element assertions
+var alert = Page.GetByRole(AriaRole.Alert);
+await Expect(alert).ToBeVisibleAsync();
+await Expect(alert).ToHaveTextAsync("Order placed successfully");
+await Expect(alert).ToContainTextAsync("successfully");
+await Expect(alert).ToHaveAttributeAsync("class", "alert-success");
+
+// Visibility
+await Expect(Page.GetByTestId("loading-spinner")).ToBeHiddenAsync();
+await Expect(Page.GetByText("Welcome")).ToBeVisibleAsync();
+
+// Form state
+await Expect(Page.GetByLabel("Email")).ToHaveValueAsync("john@example.com");
+await Expect(Page.GetByLabel("Submit")).ToBeEnabledAsync();
+await Expect(Page.GetByLabel("Submit")).ToBeDisabledAsync();
+
+// Negation
+await Expect(Page.GetByText("Error")).Not.ToBeVisibleAsync();
+
+// Count
+await Expect(Page.GetByRole(AriaRole.Listitem)).ToHaveCountAsync(5);
+```
+
+> **Important:** Playwright assertions auto-retry. Do NOT use NUnit `Assert.That()` for checking page state — it does not retry and will fail on dynamic content.
 
 ---
 
-## 12. Complete CI/CD Pipeline Example
+## 4. Реальний приклад: тестування інтернет-магазину
 
-Here is a comprehensive, production-ready GitHub Actions workflow that combines all the concepts from this lecture:
+### 4.1 Сценарій
+
+Consider an Order Management API with a web frontend. The critical user journey:
+
+```
+┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐
+│  Login   │───►│  Browse  │───►│  Create  │───►│  Verify  │
+│  Page    │    │  Orders  │    │  Order   │    │  Order   │
+└──────────┘    └──────────┘    └──────────┘    └──────────┘
+                                      │
+                                      ▼
+                                ┌──────────┐
+                                │  Order   │
+                                │ Appears  │
+                                │ in List  │
+                                └──────────┘
+```
+
+### 4.2 Тест для створення замовлення
+
+```csharp
+[Test]
+public async Task User_CanCreateOrder_AndSeeItInList()
+{
+    // Arrange — login
+    await Page.GotoAsync("https://localhost:5001/login");
+    await Page.GetByLabel("Email").FillAsync("user@example.com");
+    await Page.GetByLabel("Password").FillAsync("Password123!");
+    await Page.GetByRole(AriaRole.Button, new() { Name = "Login" }).ClickAsync();
+
+    // Verify login succeeded
+    await Expect(Page).ToHaveURLAsync(new Regex("/dashboard"));
+
+    // Act — navigate to orders and create a new one
+    await Page.GetByRole(AriaRole.Link, new() { Name = "Orders" }).ClickAsync();
+    await Page.GetByRole(AriaRole.Button, new() { Name = "New Order" }).ClickAsync();
+
+    // Fill order form
+    await Page.GetByLabel("Customer Name").FillAsync("John Doe");
+    await Page.GetByLabel("Product").SelectOptionAsync("Widget A");
+    await Page.GetByLabel("Quantity").FillAsync("5");
+    await Page.GetByRole(AriaRole.Button, new() { Name = "Submit" }).ClickAsync();
+
+    // Assert — success message appears
+    await Expect(Page.GetByRole(AriaRole.Alert)).ToHaveTextAsync("Order created successfully");
+
+    // Assert — order appears in the list
+    await Page.GetByRole(AriaRole.Link, new() { Name = "Orders" }).ClickAsync();
+    await Expect(Page.GetByText("John Doe")).ToBeVisibleAsync();
+    await Expect(Page.GetByText("Widget A")).ToBeVisibleAsync();
+}
+```
+
+### 4.3 Проблеми цього підходу
+
+This test works but has issues:
+
+```
+Problems with the flat test above:
+
+1. Login logic duplicated across every test
+2. Locator strings scattered — if "Email" label changes, fix everywhere
+3. Long test — hard to read at a glance
+4. No reusable abstractions — each test rebuilds the same steps
+5. Fragile to UI changes — a redesigned form breaks many tests
+```
+
+The solution: **Page Object Model**.
+
+---
+
+## 5. Page Object Model (POM)
+
+### 5.1 Концепція
+
+The Page Object Model encapsulates page-specific locators and actions in dedicated classes. Tests interact with **page objects** instead of raw locators:
+
+```
+Without POM:                          With POM:
+
+Test: "click #login-btn"              Test: loginPage.Login(user, pass)
+Test: "fill #email-input"
+Test: "click .nav > .orders"          Test: nav.GoToOrders()
+Test: "assert .order-row count=5"     Test: ordersPage.AssertOrderCount(5)
+
+If UI changes:                        If UI changes:
+  → Fix every test                      → Fix only the Page Object
+```
+
+### 5.2 Реалізація Page Objects
+
+**LoginPage.cs:**
+```csharp
+using Microsoft.Playwright;
+
+namespace MyApp.E2E.Tests.Pages;
+
+public class LoginPage
+{
+    private readonly IPage _page;
+
+    // Locators — defined once, used everywhere
+    private ILocator EmailInput => _page.GetByLabel("Email");
+    private ILocator PasswordInput => _page.GetByLabel("Password");
+    private ILocator LoginButton => _page.GetByRole(AriaRole.Button, new() { Name = "Login" });
+    private ILocator ErrorMessage => _page.GetByRole(AriaRole.Alert);
+
+    public LoginPage(IPage page)
+    {
+        _page = page;
+    }
+
+    public async Task GotoAsync()
+    {
+        await _page.GotoAsync("/login");
+    }
+
+    public async Task LoginAsync(string email, string password)
+    {
+        await EmailInput.FillAsync(email);
+        await PasswordInput.FillAsync(password);
+        await LoginButton.ClickAsync();
+    }
+
+    public async Task AssertErrorMessageAsync(string expectedMessage)
+    {
+        await Assertions.Expect(ErrorMessage).ToHaveTextAsync(expectedMessage);
+    }
+}
+```
+
+**OrdersPage.cs:**
+```csharp
+using Microsoft.Playwright;
+
+namespace MyApp.E2E.Tests.Pages;
+
+public class OrdersPage
+{
+    private readonly IPage _page;
+
+    private ILocator NewOrderButton => _page.GetByRole(AriaRole.Button, new() { Name = "New Order" });
+    private ILocator CustomerNameInput => _page.GetByLabel("Customer Name");
+    private ILocator ProductSelect => _page.GetByLabel("Product");
+    private ILocator QuantityInput => _page.GetByLabel("Quantity");
+    private ILocator SubmitButton => _page.GetByRole(AriaRole.Button, new() { Name = "Submit" });
+    private ILocator SuccessAlert => _page.GetByRole(AriaRole.Alert);
+    private ILocator OrderRows => _page.GetByRole(AriaRole.Row);
+
+    public OrdersPage(IPage page)
+    {
+        _page = page;
+    }
+
+    public async Task GotoAsync()
+    {
+        await _page.GotoAsync("/orders");
+    }
+
+    public async Task CreateOrderAsync(string customerName, string product, int quantity)
+    {
+        await NewOrderButton.ClickAsync();
+        await CustomerNameInput.FillAsync(customerName);
+        await ProductSelect.SelectOptionAsync(product);
+        await QuantityInput.FillAsync(quantity.ToString());
+        await SubmitButton.ClickAsync();
+    }
+
+    public async Task AssertOrderCreatedAsync()
+    {
+        await Assertions.Expect(SuccessAlert).ToHaveTextAsync("Order created successfully");
+    }
+
+    public async Task AssertOrderVisibleAsync(string customerName)
+    {
+        await Assertions.Expect(_page.GetByText(customerName)).ToBeVisibleAsync();
+    }
+}
+```
+
+### 5.3 Тест з Page Objects
+
+```csharp
+[Test]
+public async Task User_CanCreateOrder_AndSeeItInList()
+{
+    var loginPage = new LoginPage(Page);
+    var ordersPage = new OrdersPage(Page);
+
+    // Login
+    await loginPage.GotoAsync();
+    await loginPage.LoginAsync("user@example.com", "Password123!");
+
+    // Create order
+    await ordersPage.GotoAsync();
+    await ordersPage.CreateOrderAsync("John Doe", "Widget A", 5);
+    await ordersPage.AssertOrderCreatedAsync();
+
+    // Verify in list
+    await ordersPage.GotoAsync();
+    await ordersPage.AssertOrderVisibleAsync("John Doe");
+}
+```
+
+Compare this with the flat test in section 4.2 — the POM version is:
+- **Shorter** — focuses on intent, not implementation
+- **Readable** — reads like a user story
+- **Maintainable** — UI changes require updating only the page object
+
+### 5.4 Правила Page Object Model
+
+| Rule | Reason |
+|---|---|
+| Page objects expose **actions**, not locators | Tests shouldn't know about CSS/HTML |
+| Page objects **never** contain assertions* | Keep assertions in tests for clarity |
+| Methods return the **next page object** if navigation occurs | Enables fluent chaining |
+| One page object per page or significant component | Keeps classes focused |
+| Use **composition** for shared components (nav, footer) | Avoids inheritance chains |
+
+*Some teams put assertions in page objects (as shown above). Both approaches have trade-offs — the key is **consistency**.
+
+---
+
+## 6. Обробка типових проблем
+
+### 6.1 Очікування та автоматичне повторення
+
+Playwright auto-waits for elements before performing actions:
+
+```csharp
+// Playwright automatically waits for the button to be:
+// 1. Attached to the DOM
+// 2. Visible
+// 3. Stable (not animating)
+// 4. Enabled
+// 5. Not obscured by other elements
+await Page.GetByRole(AriaRole.Button, new() { Name = "Submit" }).ClickAsync();
+
+// ❌ NEVER do this — Playwright handles waiting
+Thread.Sleep(3000); // anti-pattern!
+await Task.Delay(2000); // anti-pattern!
+```
+
+For cases where you need to wait for a specific condition:
+
+```csharp
+// Wait for a network request to complete
+await Page.WaitForResponseAsync(
+    response => response.Url.Contains("/api/orders") && response.Status == 200
+);
+
+// Wait for navigation
+await Page.WaitForURLAsync("/dashboard");
+
+// Wait for an element to appear
+await Page.GetByText("Loading complete").WaitForAsync();
+
+// Wait for an element to disappear
+await Page.GetByTestId("spinner").WaitForAsync(new() { State = WaitForSelectorState.Hidden });
+```
+
+### 6.2 Нестабільні тести (Flaky Tests)
+
+Flaky tests pass sometimes and fail sometimes with the same code. They are the #1 problem in E2E testing:
+
+```
+Common causes of flakiness:
+
+┌─────────────────────────────────────────────────────┐
+│  Cause              │  Solution                      │
+├─────────────────────┼────────────────────────────────┤
+│  Timing issues      │  Use auto-wait, avoid Sleep    │
+│  Test data coupling │  Isolate test data per test    │
+│  Shared state       │  Reset state before each test  │
+│  Animation/CSS      │  Wait for stability            │
+│  Network latency    │  Mock external services        │
+│  Non-deterministic  │  Use fixed seeds, freeze time  │
+│  order              │                                │
+│  Parallel execution │  Ensure test independence      │
+└─────────────────────┴────────────────────────────────┘
+```
+
+**Strategies to reduce flakiness:**
+
+```csharp
+// 1. Use web-first assertions (they auto-retry)
+await Expect(Page.GetByText("Success")).ToBeVisibleAsync();
+
+// 2. Wait for network idle after actions that trigger API calls
+await Page.GetByRole(AriaRole.Button, new() { Name = "Save" }).ClickAsync();
+await Page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+
+// 3. Use test-specific data to avoid conflicts
+var uniqueName = $"Order-{Guid.NewGuid():N[..8]}";
+await Page.GetByLabel("Name").FillAsync(uniqueName);
+
+// 4. Retry flaky tests (use sparingly — fix the root cause first!)
+[Test]
+[Retry(3)]  // NUnit retry attribute
+public async Task FlakyTest_WithRetry()
+{
+    // ...
+}
+```
+
+### 6.3 Автентифікація
+
+Logging in through the UI for every test is slow. Playwright offers **storage state** to reuse authentication:
+
+```csharp
+// GlobalSetup.cs — run once before all tests
+public class GlobalSetup
+{
+    public static async Task AuthenticateAsync()
+    {
+        var playwright = await Playwright.CreateAsync();
+        var browser = await playwright.Chromium.LaunchAsync();
+        var context = await browser.NewContextAsync();
+        var page = await context.NewPageAsync();
+
+        // Login through UI once
+        await page.GotoAsync("https://localhost:5001/login");
+        await page.GetByLabel("Email").FillAsync("user@example.com");
+        await page.GetByLabel("Password").FillAsync("Password123!");
+        await page.GetByRole(AriaRole.Button, new() { Name = "Login" }).ClickAsync();
+        await page.WaitForURLAsync("/dashboard");
+
+        // Save authentication state (cookies, localStorage)
+        await context.StorageStateAsync(new()
+        {
+            Path = "auth-state.json"
+        });
+
+        await browser.CloseAsync();
+    }
+}
+
+// In tests — reuse the stored state
+[TestFixture]
+public class AuthenticatedTests : PageTest
+{
+    public override BrowserNewContextOptions ContextOptions()
+    {
+        return new BrowserNewContextOptions
+        {
+            StorageStatePath = "auth-state.json"
+        };
+    }
+
+    [Test]
+    public async Task Dashboard_ShowsUserName()
+    {
+        // Already logged in!
+        await Page.GotoAsync("/dashboard");
+        await Expect(Page.GetByText("Welcome, user@example.com")).ToBeVisibleAsync();
+    }
+}
+```
+
+```
+Authentication strategies:
+
+Strategy          Speed     Realism     Use When
+─────────────────────────────────────────────────────
+UI login/test     Slow      High        Testing the login flow itself
+Storage state     Fast      High        Most authenticated tests
+API login         Fast      Medium      When UI login is complex
+Mock auth         Fastest   Low         Unit/integration tests only
+```
+
+### 6.4 Тестові дані
+
+E2E tests need data. Strategies:
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│  Strategy           │ Pros              │ Cons               │
+├──────────────────────┼───────────────────┼────────────────────┤
+│  Seed database       │ Fast, consistent  │ Needs cleanup      │
+│  before tests        │                   │ logic              │
+├──────────────────────┼───────────────────┼────────────────────┤
+│  Create via API      │ Tests real flow   │ Slower, dependent  │
+│  in test setup       │                   │ on API stability   │
+├──────────────────────┼───────────────────┼────────────────────┤
+│  Create via UI       │ Most realistic    │ Slowest, fragile   │
+│  in test setup       │                   │                    │
+├──────────────────────┼───────────────────┼────────────────────┤
+│  Shared test         │ Simple setup      │ Tests coupled,     │
+│  database snapshot   │                   │ order-dependent    │
+└──────────────────────┴───────────────────┴────────────────────┘
+```
+
+```csharp
+// Recommended: Create test data via API, test via UI
+[SetUp]
+public async Task SetUp()
+{
+    // Create test data through the API (fast, reliable)
+    var client = new HttpClient();
+    await client.PostAsJsonAsync("https://localhost:5001/api/orders", new
+    {
+        CustomerName = "Test User",
+        Product = "Widget A",
+        Quantity = 3
+    });
+}
+
+[Test]
+public async Task OrdersList_ShowsExistingOrders()
+{
+    // Test through the UI (verifies the full stack)
+    await Page.GotoAsync("/orders");
+    await Expect(Page.GetByText("Test User")).ToBeVisibleAsync();
+}
+```
+
+---
+
+## 7. Розширені можливості Playwright
+
+### 7.1 Перехоплення мережевих запитів
+
+```csharp
+// Mock an API response
+await Page.RouteAsync("**/api/orders", async route =>
+{
+    await route.FulfillAsync(new()
+    {
+        Status = 200,
+        ContentType = "application/json",
+        Body = """
+        [
+            { "id": 1, "customerName": "Mock User", "product": "Widget A", "quantity": 10 }
+        ]
+        """
+    });
+});
+
+await Page.GotoAsync("/orders");
+await Expect(Page.GetByText("Mock User")).ToBeVisibleAsync();
+```
+
+Use cases for network mocking:
+- **Slow external services** — avoid waiting for third-party APIs
+- **Error scenarios** — simulate 500 errors, timeouts, malformed responses
+- **Edge cases** — return specific data that's hard to create naturally
+- **Offline behavior** — test what happens when the API is unreachable
+
+### 7.2 Скріншоти та відео
+
+```csharp
+// Screenshot on specific step
+await Page.ScreenshotAsync(new() { Path = "screenshots/order-created.png" });
+
+// Screenshot of a specific element
+await Page.GetByTestId("order-summary").ScreenshotAsync(new()
+{
+    Path = "screenshots/order-summary.png"
+});
+
+// Full-page screenshot
+await Page.ScreenshotAsync(new()
+{
+    Path = "screenshots/full-page.png",
+    FullPage = true
+});
+
+// Enable video recording for all tests
+public override BrowserNewContextOptions ContextOptions()
+{
+    return new BrowserNewContextOptions
+    {
+        RecordVideoDir = "videos/",
+        RecordVideoSize = new RecordVideoSize { Width = 1280, Height = 720 }
+    };
+}
+```
+
+### 7.3 Трейсинг
+
+Traces capture a complete record of a test execution — screenshots, DOM snapshots, network requests, and console logs:
+
+```csharp
+[Test]
+public async Task OrderFlow_WithTracing()
+{
+    // Start tracing
+    await Context.Tracing.StartAsync(new()
+    {
+        Screenshots = true,
+        Snapshots = true,
+        Sources = true
+    });
+
+    try
+    {
+        await Page.GotoAsync("/orders");
+        await Page.GetByRole(AriaRole.Button, new() { Name = "New Order" }).ClickAsync();
+        // ... test steps
+    }
+    finally
+    {
+        // Save trace (even on failure)
+        await Context.Tracing.StopAsync(new()
+        {
+            Path = "traces/order-flow.zip"
+        });
+    }
+}
+```
+
+View traces with:
+```bash
+pwsh bin/Debug/net8.0/playwright.ps1 show-trace traces/order-flow.zip
+```
+
+```
+Trace Viewer shows:
+┌─────────────────────────────────────────────────────────┐
+│  Timeline: ──●──────●──────●──────●──────●──            │
+│             nav    click   fill   click  assert          │
+│                                                         │
+│  ┌──────────────────┐  ┌──────────────────────────────┐ │
+│  │                  │  │ Action Log:                   │ │
+│  │  DOM Snapshot    │  │ 1. goto /orders               │ │
+│  │  (interactive)   │  │ 2. click "New Order"          │ │
+│  │                  │  │ 3. fill "Customer Name"       │ │
+│  │                  │  │ 4. click "Submit"             │ │
+│  │                  │  │ 5. ✓ expect visible           │ │
+│  └──────────────────┘  └──────────────────────────────┘ │
+│                                                         │
+│  Network: GET /api/orders 200 (45ms)                    │
+│           POST /api/orders 201 (120ms)                  │
+│  Console: [info] Order created: #1234                   │
+└─────────────────────────────────────────────────────────┘
+```
+
+### 7.4 Codegen — генерація тестів
+
+Playwright can record your interactions and generate test code:
+
+```bash
+pwsh bin/Debug/net8.0/playwright.ps1 codegen https://localhost:5001
+```
+
+This opens a browser and a code generator window. Every action you take is recorded as C# code:
+
+```
+┌──────────────────────────────┐  ┌──────────────────────────────┐
+│  Browser Window              │  │  Code Generator              │
+│                              │  │                              │
+│  ┌────────────────────────┐  │  │  await page.GotoAsync(       │
+│  │  Your App              │  │  │    "https://localhost:5001");│
+│  │                        │  │  │                              │
+│  │  [Email: ________]     │  │  │  await page.GetByLabel(      │
+│  │  [Password: ________]  │  │  │    "Email")                  │
+│  │  [Login]               │  │  │    .FillAsync("user@...");   │
+│  └────────────────────────┘  │  │                              │
+│                              │  │  await page.GetByLabel(      │
+│  Click, type, navigate...    │  │    "Password")               │
+│  Code appears in real-time →│  │    .FillAsync("pass");       │
+│                              │  │                              │
+└──────────────────────────────┘  └──────────────────────────────┘
+```
+
+> **Tip:** Codegen-generated code is a starting point, not a finished test. Always refactor it into Page Objects and add proper assertions.
+
+### 7.5 Емуляція пристроїв
+
+```csharp
+// Test on mobile viewport
+public override BrowserNewContextOptions ContextOptions()
+{
+    return new BrowserNewContextOptions
+    {
+        ViewportSize = new ViewportSize { Width = 375, Height = 667 },
+        IsMobile = true,
+        HasTouch = true,
+        // Emulate specific device
+        UserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X)..."
+    };
+}
+
+[Test]
+public async Task MobileMenu_ShouldToggleOnClick()
+{
+    await Page.GotoAsync("/");
+
+    // Mobile hamburger menu
+    await Page.GetByRole(AriaRole.Button, new() { Name = "Menu" }).ClickAsync();
+    await Expect(Page.GetByRole(AriaRole.Navigation)).ToBeVisibleAsync();
+}
+```
+
+---
+
+## 8. E2E тести в CI/CD
+
+### 8.1 GitHub Actions Workflow
 
 ```yaml
-# .github/workflows/ci-cd.yml
-
-name: CI/CD Pipeline
+# .github/workflows/e2e-tests.yml
+name: E2E Tests
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
-
-env:
-  DOTNET_VERSION: '9.0.x'
-  DOTNET_NOLOGO: true
-  DOTNET_CLI_TELEMETRY_OPTOUT: true
+    branches: [main]
 
 jobs:
-  # ─────────────────────────────────────────────
-  # Stage 1: Build
-  # ─────────────────────────────────────────────
-  build:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
-
-      - name: Cache NuGet packages
-        uses: actions/cache@v5
-        with:
-          path: ~/.nuget/packages
-          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
-          restore-keys: |
-            ${{ runner.os }}-nuget-
-
-      - name: Restore dependencies
-        run: dotnet restore
-
-      - name: Build
-        run: dotnet build --no-restore --configuration Release
-
-  # ─────────────────────────────────────────────
-  # Stage 2: Unit Tests + Coverage
-  # ─────────────────────────────────────────────
-  unit-tests:
-    needs: build
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
-
-      - name: Cache NuGet packages
-        uses: actions/cache@v5
-        with:
-          path: ~/.nuget/packages
-          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
-          restore-keys: |
-            ${{ runner.os }}-nuget-
-
-      - name: Run unit tests with coverage
-        run: >
-          dotnet test
-          --filter "Category=Unit"
-          --configuration Release
-          --verbosity normal
-          --collect:"XPlat Code Coverage"
-          --results-directory ./coverage
-          --logger "trx;LogFileName=unit-test-results.trx"
-
-      - name: Install ReportGenerator
-        run: dotnet tool install --global dotnet-reportgenerator-globaltool
-
-      - name: Generate coverage report
-        run: >
-          reportgenerator
-          -reports:./coverage/**/coverage.cobertura.xml
-          -targetdir:./coverage/report
-          -reporttypes:"Html;TextSummary;Cobertura"
-
-      - name: Display coverage summary
-        run: cat ./coverage/report/Summary.txt
-
-      - name: Upload coverage report
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-report
-          path: ./coverage/report/
-
-      - name: Upload test results
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: unit-test-results
-          path: ./coverage/**/*.trx
-
-  # ─────────────────────────────────────────────
-  # Stage 3: Integration Tests
-  # ─────────────────────────────────────────────
-  integration-tests:
-    needs: build
+  e2e:
     runs-on: ubuntu-latest
 
     services:
       postgres:
         image: postgres:16
         env:
-          POSTGRES_USER: testuser
-          POSTGRES_PASSWORD: testpassword
           POSTGRES_DB: testdb
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
         ports:
           - 5432:5432
         options: >-
@@ -1583,329 +994,333 @@ jobs:
           --health-retries 5
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
+      - uses: actions/checkout@v4
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
+          dotnet-version: '8.0.x'
 
-      - name: Cache NuGet packages
-        uses: actions/cache@v5
-        with:
-          path: ~/.nuget/packages
-          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
-          restore-keys: |
-            ${{ runner.os }}-nuget-
+      - name: Build application
+        run: dotnet build src/MyApp.Api/MyApp.Api.csproj
 
-      - name: Run integration tests
-        run: >
-          dotnet test
-          --filter "Category=Integration"
-          --configuration Release
-          --verbosity normal
-          --logger "trx;LogFileName=integration-test-results.trx"
-          --results-directory ./test-results
+      - name: Start application
+        run: |
+          dotnet run --project src/MyApp.Api/MyApp.Api.csproj &
+          # Wait for the app to be ready
+          for i in $(seq 1 30); do
+            curl -s http://localhost:5001/health && break
+            sleep 1
+          done
+
+      - name: Install Playwright browsers
+        run: pwsh tests/MyApp.E2E.Tests/bin/Debug/net8.0/playwright.ps1 install --with-deps
+
+      - name: Run E2E tests
+        run: dotnet test tests/MyApp.E2E.Tests/ --logger "trx;LogFileName=e2e-results.trx"
         env:
-          ConnectionStrings__Postgres: "Host=localhost;Port=5432;Database=testdb;Username=testuser;Password=testpassword"
+          BASE_URL: http://localhost:5001
 
       - name: Upload test results
-        uses: actions/upload-artifact@v4
         if: always()
+        uses: actions/upload-artifact@v4
         with:
-          name: integration-test-results
-          path: ./test-results/**/*.trx
-
-  # ─────────────────────────────────────────────
-  # Stage 4: Deploy to Staging
-  # ─────────────────────────────────────────────
-  deploy-staging:
-    needs: [unit-tests, integration-tests]
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    environment:
-      name: staging
-      url: https://staging.myapp.com
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
-
-      - name: Publish application
-        run: dotnet publish --configuration Release --output ./publish
-
-      - name: Deploy to staging
-        run: echo "Deploy to staging environment"
-        # In a real project, this would deploy to Azure, AWS, etc.
-
-  # ─────────────────────────────────────────────
-  # Stage 5: Deploy to Production (manual approval)
-  # ─────────────────────────────────────────────
-  deploy-production:
-    needs: deploy-staging
-    runs-on: ubuntu-latest
-    environment:
-      name: production
-      url: https://myapp.com
-
-    steps:
-      - name: Deploy to production
-        run: echo "Deploy to production environment"
+          name: e2e-results
+          path: |
+            tests/MyApp.E2E.Tests/TestResults/
+            tests/MyApp.E2E.Tests/traces/
+            tests/MyApp.E2E.Tests/screenshots/
 ```
 
-Pipeline visualization:
+### 8.2 Конфігурація для CI
+
+```csharp
+// In tests, use environment variable for the base URL
+[TestFixture]
+public class BaseE2ETest : PageTest
+{
+    protected string BaseUrl =>
+        Environment.GetEnvironmentVariable("BASE_URL") ?? "https://localhost:5001";
+
+    [SetUp]
+    public async Task NavigateToBase()
+    {
+        await Page.GotoAsync(BaseUrl);
+    }
+}
+```
+
+### 8.3 Headless vs. Headed
 
 ```
-                    ┌──────────────┐
-                    │    build     │
-                    └──────┬───────┘
-                           │
-              ┌────────────┴────────────┐
-              ▼                         ▼
-     ┌──────────────┐        ┌────────────────────┐
-     │  unit-tests  │        │ integration-tests  │
-     │  + coverage  │        │  (with Postgres)   │
-     └──────┬───────┘        └────────┬───────────┘
-            │                         │
-            └────────────┬────────────┘
-                         ▼
-               ┌──────────────────┐
-               │  deploy-staging  │  (only on push to main)
-               └────────┬─────────┘
-                        ▼
-              ┌────────────────────┐
-              │ deploy-production  │  (manual approval)
-              └────────────────────┘
+CI Environment (headless — default):
+  ┌─────────────────────────────┐
+  │  No visible browser window  │
+  │  Faster execution           │
+  │  Lower resource usage       │
+  │  Used in CI/CD pipelines    │
+  └─────────────────────────────┘
+
+Local Development (headed):
+  ┌─────────────────────────────┐
+  │  Visible browser window     │
+  │  See test execution live    │
+  │  Useful for debugging       │
+  │  Set via environment var    │
+  └─────────────────────────────┘
+```
+
+Run tests headed locally:
+```bash
+HEADED=1 dotnet test
+```
+
+```csharp
+public override BrowserNewContextOptions ContextOptions()
+{
+    return new BrowserNewContextOptions
+    {
+        // Slow down actions for debugging
+        // (only locally — never in CI)
+    };
+}
 ```
 
 ---
 
-## 13. Advanced Topics
+## 9. Найкращі практики
 
-### 13.1 Reusable Workflows
+### 9.1 Що тестувати E2E
 
-As your organization grows, you may want to share workflow logic across repositories:
+```
+✅ DO test with E2E:                    ❌ DON'T test with E2E:
 
-```yaml
-# .github/workflows/reusable-dotnet-test.yml (in a shared repository)
-
-name: Reusable .NET Test
-
-on:
-  workflow_call:
-    inputs:
-      dotnet-version:
-        required: false
-        type: string
-        default: '9.0.x'
-      test-filter:
-        required: false
-        type: string
-        default: ''
-
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: ${{ inputs.dotnet-version }}
-      - run: dotnet restore
-      - run: dotnet build --no-restore --configuration Release
-      - run: dotnet test --no-build --configuration Release --filter "${{ inputs.test-filter }}"
+• Critical happy paths                  • Every form validation rule
+• Authentication flows                  • API response formats
+• Multi-page workflows                  • Business logic calculations
+• Payment / checkout                    • Individual component rendering
+• User onboarding                       • Error message wording
+• Search and filtering                  • Sorting algorithms
+  (with results displayed)              • Database query correctness
 ```
 
-```yaml
-# .github/workflows/ci.yml (in a consuming repository)
+### 9.2 Правило "3-5 E2E тестів"
 
-name: CI
+For most applications, 3-5 well-chosen E2E tests provide 80% of the confidence:
 
-on:
-  push:
-    branches: [ main ]
+```
+Example: E-commerce Application
 
-jobs:
-  unit-tests:
-    uses: my-org/shared-workflows/.github/workflows/reusable-dotnet-test.yml@main
-    with:
-      test-filter: "Category=Unit"
-
-  integration-tests:
-    uses: my-org/shared-workflows/.github/workflows/reusable-dotnet-test.yml@main
-    with:
-      test-filter: "Category=Integration"
+1. Registration → Login → Browse → Add to Cart → Checkout → Confirmation
+2. Search → Filter → Product Detail → Reviews
+3. Login → Order History → Reorder → Checkout
+4. Login → Account Settings → Change Password → Login with new password
+5. Guest → Add to Cart → Login prompt → Login → Cart preserved → Checkout
 ```
 
-### 13.2 Secrets Management
+### 9.3 Чек-лист якості E2E тестів
 
-Never hard-code secrets in workflow files. Use GitHub Secrets:
-
-```yaml
-# Set secrets in: Repository Settings > Secrets and variables > Actions
-
-steps:
-  - name: Connect to database
-    run: dotnet test
-    env:
-      DB_CONNECTION_STRING: ${{ secrets.DB_CONNECTION_STRING }}
-
-  - name: Deploy
-    run: ./deploy.sh
-    env:
-      DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN }}
+```
+□ Each test is independent (can run alone, in any order)
+□ No hardcoded waits (Thread.Sleep, Task.Delay)
+□ Uses resilient locators (role, label, text, test-id)
+□ Page Object Model for shared pages
+□ Test data created per test or in setup (not shared across tests)
+□ Assertions use Playwright's auto-retry (Expect)
+□ Authentication reused via storage state
+□ Tests run in CI without modification
+□ Traces/screenshots captured on failure
+□ Cleanup after tests (if creating data)
 ```
 
-| Secret Scope | Visibility | Use Case |
+### 9.4 Антипатерни
+
+| Anti-pattern | Problem | Solution |
 |---|---|---|
-| **Repository secrets** | Available to all workflows in the repo | API keys, tokens |
-| **Environment secrets** | Available only in a specific environment | Production DB credentials |
-| **Organization secrets** | Shared across repos in an organization | Shared service tokens |
+| Testing everything E2E | Slow suite, high flakiness | Push tests down the pyramid |
+| `Thread.Sleep(5000)` | Slow, still flaky | Use Playwright auto-wait |
+| Shared test data | Tests depend on execution order | Isolate data per test |
+| Testing implementation | Breaks on refactoring | Test user-visible behavior |
+| Ignoring flaky tests | Erodes trust in test suite | Fix root cause immediately |
+| No Page Objects | Duplicated locators everywhere | Extract page objects early |
+| Screenshot-only debugging | Hard to reproduce | Use traces |
 
-**Important:** Secrets are **not** passed to workflows triggered by pull requests from forks (security measure).
+---
 
-### 13.3 Workflow Security Best Practices
+## 10. E2E тестування API (без браузера)
 
-| Practice | Why |
+Playwright can also test APIs directly, which is useful for testing backend flows that don't have a UI:
+
+### 10.1 API тестування з Playwright
+
+```csharp
+using Microsoft.Playwright.NUnit;
+using Microsoft.Playwright;
+
+[TestFixture]
+public class OrderApiE2ETests : PlaywrightTest
+{
+    private IAPIRequestContext _api = null!;
+
+    [SetUp]
+    public async Task SetUp()
+    {
+        _api = await Playwright.APIRequest.NewContextAsync(new()
+        {
+            BaseURL = "https://localhost:5001",
+            ExtraHTTPHeaders = new Dictionary<string, string>
+            {
+                ["Accept"] = "application/json"
+            }
+        });
+    }
+
+    [Test]
+    public async Task FullOrderLifecycle()
+    {
+        // Create
+        var createResponse = await _api.PostAsync("/api/orders", new()
+        {
+            DataObject = new
+            {
+                CustomerName = "E2E Test",
+                Product = "Widget",
+                Quantity = 3
+            }
+        });
+        Assert.That(createResponse.Status, Is.EqualTo(201));
+
+        var created = await createResponse.JsonAsync();
+        var orderId = created?.GetProperty("id").GetInt32();
+
+        // Read
+        var getResponse = await _api.GetAsync($"/api/orders/{orderId}");
+        Assert.That(getResponse.Status, Is.EqualTo(200));
+
+        // Update
+        var updateResponse = await _api.PutAsync($"/api/orders/{orderId}", new()
+        {
+            DataObject = new
+            {
+                CustomerName = "E2E Test Updated",
+                Product = "Widget",
+                Quantity = 5
+            }
+        });
+        Assert.That(updateResponse.Status, Is.EqualTo(200));
+
+        // Delete
+        var deleteResponse = await _api.DeleteAsync($"/api/orders/{orderId}");
+        Assert.That(deleteResponse.Status, Is.EqualTo(204));
+
+        // Verify deleted
+        var verifyResponse = await _api.GetAsync($"/api/orders/{orderId}");
+        Assert.That(verifyResponse.Status, Is.EqualTo(404));
+    }
+
+    [TearDown]
+    public async Task TearDown()
+    {
+        await _api.DisposeAsync();
+    }
+}
+```
+
+### 10.2 Комбінування API та UI тестів
+
+The most powerful E2E tests combine API and UI:
+
+```csharp
+[Test]
+public async Task OrderCreatedViaApi_AppearsInUi()
+{
+    // Arrange — create data via API (fast)
+    var api = await Playwright.APIRequest.NewContextAsync(new()
+    {
+        BaseURL = "https://localhost:5001"
+    });
+    await api.PostAsync("/api/orders", new()
+    {
+        DataObject = new
+        {
+            CustomerName = "API-Created Order",
+            Product = "Widget B",
+            Quantity = 7
+        }
+    });
+
+    // Act & Assert — verify via UI (realistic)
+    await Page.GotoAsync("/orders");
+    await Expect(Page.GetByText("API-Created Order")).ToBeVisibleAsync();
+    await Expect(Page.GetByText("Widget B")).ToBeVisibleAsync();
+}
+```
+
+```
+This pattern:
+
+  API (fast)           UI (realistic)
+  ┌──────────┐         ┌──────────────┐
+  │ Create   │────────►│ Verify       │
+  │ test data│         │ user sees it │
+  └──────────┘         └──────────────┘
+
+  Best of both worlds:
+  • Fast setup (no UI interaction for data creation)
+  • Realistic validation (user perspective)
+  • Tests the full stack (API → DB → UI)
+```
+
+---
+
+## 11. Підсумок
+
+### Ключові тези
+
+| Topic | Key Takeaway |
 |---|---|
-| **Pin action versions with SHA** | Prevent supply-chain attacks: `uses: actions/checkout@8ade135...` |
-| **Use `permissions` to limit GITHUB_TOKEN** | Principle of least privilege |
-| **Don't use `pull_request_target` with checkout** | Prevents code injection from forks |
-| **Audit third-party actions** | Review source before trusting |
+| **What is E2E testing** | Tests the full system from the user's perspective |
+| **Testing pyramid** | Few E2E tests, each covering a critical user journey |
+| **Playwright** | Modern, fast, auto-waiting, multi-browser E2E framework for .NET |
+| **Locators** | Prefer role, label, text-based selectors over CSS/XPath |
+| **Page Object Model** | Encapsulate locators and actions; tests read like user stories |
+| **Flakiness** | Auto-wait, isolate data, use traces to diagnose |
+| **Authentication** | Use storage state to reuse login across tests |
+| **CI/CD** | Run headless, upload traces as artifacts, use health checks |
+| **Best practices** | Test critical paths, keep suite small, fix flaky tests immediately |
 
-```yaml
-# Limit permissions
-permissions:
-  contents: read       # Only read access to code
-  pull-requests: write # Can comment on PRs
+### Співвідношення тестів
 
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      # Pin to a specific commit SHA for security
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+```
+Recommended distribution for a typical web application:
+
+  E2E:          ████                          3-5%
+  Integration:  ████████████████████          20-30%
+  Unit:         ████████████████████████████  65-75%
+
+Each level has a purpose. E2E ≠ "better" — it's "different."
+Use the right level for each verification.
 ```
 
 ---
 
-## 14. Practical Exercise
+## Домашнє завдання
 
-### Task: Set Up a CI/CD Pipeline for a .NET Project
-
-Create a GitHub Actions workflow for a .NET test project that includes:
-
-1. **Build job**: Restore, build, cache NuGet packages
-2. **Test job**: Run xUnit tests, collect coverage with Coverlet
-3. **Report job**: Generate coverage report, upload as artifact
-4. **Quality gate**: Fail the pipeline if coverage drops below 75%
-
-**Starter workflow structure:**
-
-```yaml
-# .github/workflows/ci.yml
-name: CI Pipeline
-
-on:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
-
-jobs:
-  build:
-    # TODO: Implement build steps with caching
-
-  test:
-    needs: build
-    # TODO: Run tests with coverage collection
-
-  quality-gate:
-    needs: test
-    # TODO: Check coverage threshold (75%)
-    # TODO: Upload coverage report as artifact
-```
-
-**Bonus challenges:**
-- Add a matrix build for .NET 9 and .NET 10
-- Add a step that posts the coverage summary as a PR comment
-- Add branch protection rules requiring the CI pipeline to pass
-
-> **Discussion (15 min):** Walk through your workflow design. What would happen if the test step fails? What if coverage is at 74%? How would you debug a failing workflow?
+1. Set up a Playwright .NET project for the Lab6 Orders API
+2. Write E2E tests for:
+   - Creating an order through the API and verifying it appears in GET /api/orders
+   - The full CRUD lifecycle (Create → Read → Update → Delete)
+   - Error handling (creating an order with invalid data)
+3. Implement the Page Object Model (or an equivalent abstraction for API tests)
+4. Configure tests to run in a GitHub Actions workflow
+5. Add trace capture for failed tests
 
 ---
 
-## 15. Summary
+## Додаткові ресурси
 
-### Ключові висновки
-
-1. **CI/CD automates the feedback loop** — code changes are built, tested, and analyzed automatically on every commit, catching issues within minutes
-2. **Continuous Integration** means merging frequently and running automated tests on every change; **Continuous Delivery** means every change is deployable; **Continuous Deployment** means every passing change is deployed automatically
-3. **GitHub Actions** provides CI/CD directly in GitHub with workflows defined in YAML — triggers, jobs, steps, matrix builds, caching, and artifacts
-4. **Code coverage in CI** (Coverlet + ReportGenerator) provides consistent quality metrics and can enforce minimum thresholds as quality gates
-5. **Branch protection rules** prevent unreviewed or untested code from reaching protected branches
-6. **Test management** encompasses test plans, test case management, defect lifecycle tracking, and metrics-based reporting
-7. **Quality gates** define minimum conditions (test pass rate, coverage, code review) that must be met before progressing to the next stage
-8. **Flaky tests** erode CI trust — detect them early, quarantine if needed, fix the root cause, never ignore them
-9. **Docker in CI** (via services or Testcontainers) provides real infrastructure for integration tests in a clean, reproducible way
-10. **Risk-based testing** focuses effort where failures are most likely and most impactful
-
-### Quick Reference: Essential YAML Patterns
-
-```yaml
-# Trigger on push and PR
-on:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
-
-# Cache NuGet
-- uses: actions/cache@v5
-  with:
-    path: ~/.nuget/packages
-    key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
-
-# Run tests with coverage
-- run: dotnet test --collect:"XPlat Code Coverage" --results-directory ./coverage
-
-# Upload artifact
-- uses: actions/upload-artifact@v4
-  if: always()
-  with:
-    name: results
-    path: ./coverage/
-
-# Job dependency
-jobs:
-  deploy:
-    needs: [build, test]
-
-# Matrix build
-strategy:
-  matrix:
-    os: [ubuntu-latest, windows-latest]
-    dotnet-version: ['9.0.x', '10.0.x']
-```
-
----
-
-## Посилання та додаткова література
-
-- **GitHub Actions Documentation** — https://docs.github.com/en/actions
-- **GitHub Actions for .NET** — https://docs.github.com/en/actions/use-cases-and-examples/building-and-testing/building-and-testing-net
-- **Coverlet Documentation** — https://github.com/coverlet-coverage/coverlet
-- **ReportGenerator** — https://github.com/danielpalme/ReportGenerator
-- **Testcontainers for .NET** — https://dotnet.testcontainers.org/
-- **"Continuous Delivery"** — Jez Humble, David Farley (Addison-Wesley, 2010)
-- **"Accelerate: Building and Scaling High Performing Technology Organizations"** — Nicole Forsgren, Jez Humble, Gene Kim (IT Revolution, 2018)
-- **ISTQB Foundation Level Syllabus** (v4.0, 2023) — Chapters 5-6
-- **DORA Metrics** — https://dora.dev/
-- **Martin Fowler: Continuous Integration** — https://martinfowler.com/articles/continuousIntegration.html
-- **GitHub Branch Protection Rules** — https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-a-branch-protection-rule
+- [Playwright for .NET Documentation](https://playwright.dev/dotnet/)
+- [Playwright Best Practices](https://playwright.dev/dotnet/docs/best-practices)
+- [Page Object Model Pattern](https://playwright.dev/dotnet/docs/pom)
+- [Martin Fowler: TestPyramid](https://martinfowler.com/bliki/TestPyramid.html)
+- [Testing Trophy by Kent C. Dodds](https://kentcdodds.com/blog/the-testing-trophy-and-testing-classifications)

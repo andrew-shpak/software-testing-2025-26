@@ -1,1245 +1,1381 @@
-# Лекція 6: Техніки проєктування тестів та покриття коду
+# Лекція 6: CI/CD та управління тестуванням
 
 ## Навчальні цілі
 
 Після завершення цієї лекції студенти зможуть:
 
-- Explain why systematic test design is superior to ad-hoc testing
-- Apply black-box test design techniques: equivalence partitioning, boundary value analysis, decision tables, state transition testing, and pairwise testing
-- Apply white-box test design techniques: statement, branch, condition, MC/DC, and path coverage
-- Set up Coverlet and ReportGenerator to measure and visualize code coverage in .NET
-- Interpret coverage reports and understand what coverage measures and what it does not
-- Choose the appropriate test design technique for a given testing scenario
-- Integrate coverage thresholds into a CI pipeline
+- Define Continuous Integration, Continuous Delivery, and Continuous Deployment
+- Explain why CI/CD is essential for sustainable software testing
+- Write GitHub Actions workflows to build, test, and analyze .NET projects
+- Configure code coverage collection and reporting in CI pipelines
+- Set up branch protection rules and quality gates
+- Describe test management concepts: test plans, defect lifecycle, and metrics
+- Identify and manage flaky tests in CI environments
+- Use Docker and Testcontainers in GitHub Actions for integration tests
 
 ---
 
-## 1. Чому систематичне проєктування тестів має значення
+## 1. Що таке CI/CD і чому це важливо для тестування
 
-### 1.1 Ad-Hoc тестування vs. Систематичне тестування
+### 1.1 Проблема без CI/CD
 
-When developers write tests without a method, they tend to test only the cases they thought of while coding — the "happy path" and a few obvious errors. This is **ad-hoc testing**, and it leaves large gaps.
+Уявіть команду з п'яти розробників, що працюють над одним проєктом. Кожен розробник працює в окремій гілці днями або тижнями. Коли вони нарешті намагаються злити:
 
-| Ad-Hoc Testing | Systematic Testing |
+```
+Developer A ──────────────────────► Merge ──┐
+Developer B ──────────────────────► Merge ──┤
+Developer C ──────────────────────► Merge ──┼──► "Integration Hell"
+Developer D ──────────────────────► Merge ──┤    (conflicts, broken tests,
+Developer E ──────────────────────► Merge ──┘     incompatible changes)
+```
+
+Поширені симптоми:
+- Конфлікти злиття, що потребують днів для вирішення
+- Тести, що проходять локально, але падають при об'єднанні
+- Синдром "У мене на машині працює"
+- Ніхто не знає, чи можна розгортати основну гілку
+- Ручне тестування стає вузьким місцем
+
+### 1.2 Рішення CI/CD
+
+CI/CD автоматизує процес інтеграції коду, запуску тестів та доставки ПЗ:
+
+```
+Developer pushes code
+        │
+        ▼
+┌─────────────────────────────────────────────────────────┐
+│  CI/CD Pipeline (automated)                             │
+│                                                         │
+│  ┌───────┐   ┌──────┐   ┌─────────┐   ┌────────────┐  │
+│  │ Build │──►│ Test │──►│ Analyze │──►│   Deploy   │  │
+│  └───────┘   └──────┘   └─────────┘   └────────────┘  │
+│                                                         │
+│  Minutes, not days                                      │
+└─────────────────────────────────────────────────────────┘
+        │
+        ▼
+Fast feedback: pass ✓ or fail ✗
+```
+
+### 1.3 Ключові переваги для тестування
+
+| Benefit | Description |
 |---|---|
-| Based on intuition and experience | Based on defined techniques and rules |
-| Coverage is unknown and inconsistent | Coverage is measurable and deliberate |
-| Easy to miss boundary conditions | Boundaries are explicitly targeted |
-| Hard to justify "enough testing" | Provides rationale for test case selection |
-| Duplicate effort — same areas tested repeatedly | Minimizes redundancy, maximizes fault detection |
-| Results vary by tester | Results are reproducible and reviewable |
+| **Fast feedback** | Developers know within minutes if their change breaks something |
+| **Consistent environment** | Tests run in the same environment every time |
+| **Automated regression** | Every change is tested against the full test suite |
+| **Quality visibility** | Coverage reports, test trends, and metrics are always available |
+| **Confidence to refactor** | Comprehensive automated tests make refactoring safe |
+| **Shift-left testing** | Defects are caught early, when they are cheapest to fix |
 
-### 1.2 Фундаментальна проблема
-
-Recall from Lecture 1: **exhaustive testing is impossible**. Even a simple function with two `int` parameters has 2^32 x 2^32 = 2^64 possible input combinations — roughly 18.4 quintillion test cases.
-
-Test design techniques solve this problem by providing **systematic strategies** to select a small but effective subset of test cases that maximizes the chance of finding defects.
-
-```
-All possible inputs:  ████████████████████████████████████████████████
-                      (billions or more)
-
-Ad-hoc selection:     █  █       █            █    █
-                      (random, gaps, overlaps)
-
-Systematic selection: █ █ █ █ █ █ █ █ █ █ █ █ █ █ █
-                      (structured, representative, boundary-focused)
-```
-
-### 1.3 Дві родини технік
-
-Test design techniques fall into two broad categories:
-
-```
-Test Design Techniques
-├── Black-Box (Specification-Based)
-│   ├── Equivalence Partitioning
-│   ├── Boundary Value Analysis
-│   ├── Decision Table Testing
-│   ├── State Transition Testing
-│   └── Pairwise / Combinatorial Testing
-│
-└── White-Box (Structure-Based)
-    ├── Statement Coverage
-    ├── Branch / Decision Coverage
-    ├── Condition Coverage
-    ├── MC/DC Coverage
-    └── Path Coverage
-```
-
-- **Black-box techniques** derive tests from the **specification** — what the system should do — without looking at the code.
-- **White-box techniques** derive tests from the **code structure** — ensuring that specific code elements are exercised.
-
-Both are needed. Black-box techniques test *what* the software does; white-box techniques ensure *how much* of the code is exercised.
-
-> **Discussion (5 min):** Think about a function you wrote recently. How did you decide which test cases to write? Did you use any systematic approach, or was it ad-hoc?
+> **Discussion (5 min):** Have you ever experienced "integration hell"? How long did it take to resolve? How could CI/CD have helped?
 
 ---
 
-## 2. Техніки проєктування тестів методом чорної скриньки
+## 2. Концепції CI/CD
 
-Техніки чорної скриньки розглядають систему, що тестується, як непрозору коробку: ви знаєте вхідні дані та очікувані результати, але не внутрішню реалізацію.
+### 2.1 Безперервна інтеграція (CI)
 
-### 2.1 Еквівалентне розбиття (EP)
+**Continuous Integration** is the practice of merging all developers' working copies to a shared mainline **frequently** — at least once per day.
 
-#### Ідея
+#### Основні принципи
 
-Inputs to a system can be divided into groups (partitions) where all values in a group are expected to be treated the same way. If one value in a partition works correctly, we assume all values in that partition will work correctly.
+1. **Maintain a single source repository** — all code in one place (e.g., Git)
+2. **Automate the build** — one command to build the entire project
+3. **Make the build self-testing** — automated tests run with every build
+4. **Every commit triggers a build** — no manual intervention needed
+5. **Keep the build fast** — ideally under 10 minutes
+6. **Fix broken builds immediately** — a broken build is the team's top priority
+7. **Everyone can see the results** — build status is visible to the whole team
 
-This lets us replace millions of test cases with one representative per partition.
-
-#### Як застосовувати
-
-1. Identify the input domain
-2. Divide inputs into **valid** and **invalid** equivalence partitions
-3. Select one representative value from each partition
-4. Write a test case for each representative
-
-#### Приклад: Ціноутворення квитків за віком
-
-**Specification:** A cinema charges different prices based on age:
-- Under 5: Free
-- 5-12: Child ticket ($8)
-- 13-17: Youth ticket ($12)
-- 18-64: Adult ticket ($16)
-- 65+: Senior ticket ($10)
-- Negative age: Invalid (throw exception)
+#### Як CI виглядає на практиці
 
 ```
-Equivalence Partitions:
+Developer workflow with CI:
 
-Invalid     Valid Partitions
-  │    ┌───────┬───────┬───────┬───────┬──────────┐
-  │    │ < 0   │ 0-4   │ 5-12  │ 13-17 │ 18-64    │ 65+
-  │    │Invalid│ Free  │ Child │ Youth │ Adult    │ Senior
-  ▼    └───────┴───────┴───────┴───────┴──────────┘
-──────┼───┼───────┼───────┼───────┼────────────┼────────►
-     -1   0   2   5   8  13  15  18    40     65   80
-          ▲       ▲       ▲       ▲          ▲       ▲
-        representatives (one per partition)
+1. Pull latest from main          git pull origin main
+2. Make changes                   (write code + tests)
+3. Run tests locally              dotnet test
+4. Commit and push                git push origin feature-branch
+5. CI server runs automatically   Build → Test → Report
+6. Review results                 Green ✓ → create PR
+                                  Red ✗ → fix and push again
 ```
 
-```csharp
-// TicketPricing/PriceCalculator.cs
-namespace TicketPricing;
+### 2.2 Безперервна доставка vs. Безперервне розгортання
 
-public class PriceCalculator
-{
-    public decimal GetTicketPrice(int age)
-    {
-        return age switch
-        {
-            < 0 => throw new ArgumentOutOfRangeException(
-                       nameof(age), "Age cannot be negative."),
-            < 5 => 0m,
-            < 13 => 8m,
-            < 18 => 12m,
-            < 65 => 16m,
-            _ => 10m,
-        };
-    }
-}
+Ці терміни часто плутають. Ось відмінність:
+
+```
+Continuous Integration
+        │
+        ▼
+┌──────────────────┐
+│  Code committed  │
+│  Build + Test    │
+└────────┬─────────┘
+         │
+         ▼
+┌──────────────────┐     ┌──────────────────────────────────────┐
+│ Continuous       │     │ Continuous Deployment                │
+│ Delivery         │     │                                      │
+│                  │     │ Every change that passes all stages  │
+│ Every change is  │     │ is automatically deployed to         │
+│ deployable, but  │     │ production — no manual approval.     │
+│ deployment is a  │     │                                      │
+│ manual decision. │     │ Requires: high test confidence,      │
+│                  │     │ feature flags, monitoring.           │
+└──────────────────┘     └──────────────────────────────────────┘
 ```
 
-```csharp
-// TicketPricing.Tests/PriceCalculatorTests.cs
-using Shouldly;
-
-namespace TicketPricing.Tests;
-
-public class PriceCalculatorTests
-{
-    private readonly PriceCalculator _sut = new();
-
-    // --- Equivalence Partitioning: one representative per partition ---
-
-    [Fact]
-    public void GetTicketPrice_NegativeAge_ThrowsException()
-    {
-        Should.Throw<ArgumentOutOfRangeException>(
-            () => _sut.GetTicketPrice(-1));
-    }
-
-    [Theory]
-    [InlineData(2, 0)]      // Free (age 0-4)
-    [InlineData(8, 8)]      // Child (age 5-12)
-    [InlineData(15, 12)]    // Youth (age 13-17)
-    [InlineData(40, 16)]    // Adult (age 18-64)
-    [InlineData(80, 10)]    // Senior (age 65+)
-    public void GetTicketPrice_ValidAge_ReturnsExpectedPrice(
-        int age, decimal expectedPrice)
-    {
-        _sut.GetTicketPrice(age).ShouldBe(expectedPrice);
-    }
-}
-```
-
-**Number of test cases:** 6 (one per partition) instead of testing every possible age.
-
-### 2.2 Аналіз граничних значень (BVA)
-
-#### Ідея
-
-Defects tend to cluster at the **boundaries** between equivalence partitions. Boundary value analysis focuses on the edges — the minimum, maximum, and values just inside and just outside each boundary.
-
-#### Двозначний vs. Тризначний BVA
-
-| Approach | Values tested at each boundary | ISTQB standard |
+| Aspect | Continuous Delivery | Continuous Deployment |
 |---|---|---|
-| **Two-value BVA** | boundary value, boundary + 1 | Yes (minimum) |
-| **Three-value BVA** | boundary - 1, boundary, boundary + 1 | Yes (thorough) |
+| **Deployment trigger** | Manual approval | Automatic |
+| **Risk tolerance** | Lower | Higher (mitigated by automation) |
+| **Test confidence required** | High | Very high |
+| **Release frequency** | On-demand (daily/weekly) | Every passing commit |
+| **Common in** | Enterprise, regulated industries | SaaS, web applications |
 
-#### Приклад: Продовження ціноутворення квитків
+### 2.3 Анатомія конвеєра CI/CD
 
-Boundaries are at ages: 0, 4/5, 12/13, 17/18, 64/65.
-
-```
-Three-value BVA at the boundary between Child (5-12) and Youth (13-17):
-
-     Child partition          Youth partition
-    ─────────────────┼─────────────────────
-                 11  12  13  14
-                  ▲   ▲   ▲   ▲
-                 BVA test points
-```
-
-```csharp
-public class PriceCalculatorBoundaryTests
-{
-    private readonly PriceCalculator _sut = new();
-
-    // --- Boundary: Free / Child at age 4 and 5 ---
-
-    [Theory]
-    [InlineData(4, 0)]     // last Free age
-    [InlineData(5, 8)]     // first Child age
-    public void GetTicketPrice_FreeChildBoundary_ReturnsCorrectPrice(
-        int age, decimal expected)
-    {
-        _sut.GetTicketPrice(age).ShouldBe(expected);
-    }
-
-    // --- Boundary: Child / Youth at age 12 and 13 ---
-
-    [Theory]
-    [InlineData(12, 8)]    // last Child age
-    [InlineData(13, 12)]   // first Youth age
-    public void GetTicketPrice_ChildYouthBoundary_ReturnsCorrectPrice(
-        int age, decimal expected)
-    {
-        _sut.GetTicketPrice(age).ShouldBe(expected);
-    }
-
-    // --- Boundary: Youth / Adult at age 17 and 18 ---
-
-    [Theory]
-    [InlineData(17, 12)]   // last Youth age
-    [InlineData(18, 16)]   // first Adult age
-    public void GetTicketPrice_YouthAdultBoundary_ReturnsCorrectPrice(
-        int age, decimal expected)
-    {
-        _sut.GetTicketPrice(age).ShouldBe(expected);
-    }
-
-    // --- Boundary: Adult / Senior at age 64 and 65 ---
-
-    [Theory]
-    [InlineData(64, 16)]   // last Adult age
-    [InlineData(65, 10)]   // first Senior age
-    public void GetTicketPrice_AdultSeniorBoundary_ReturnsCorrectPrice(
-        int age, decimal expected)
-    {
-        _sut.GetTicketPrice(age).ShouldBe(expected);
-    }
-
-    // --- Boundary: Invalid / Free at age -1 and 0 ---
-
-    [Fact]
-    public void GetTicketPrice_MinusOne_ThrowsException()
-    {
-        Should.Throw<ArgumentOutOfRangeException>(
-            () => _sut.GetTicketPrice(-1));
-    }
-
-    [Fact]
-    public void GetTicketPrice_Zero_ReturnsFree()
-    {
-        _sut.GetTicketPrice(0).ShouldBe(0m);
-    }
-}
-```
-
-> **Key insight:** Equivalence partitioning and boundary value analysis are complementary. EP identifies the partitions; BVA focuses testing effort on the edges where bugs hide.
-
-### 2.3 Тестування за таблицею рішень
-
-#### Ідея
-
-When system behavior depends on **combinations of conditions**, a decision table enumerates all combinations and their expected outcomes. This is especially useful for business rules with multiple interacting conditions.
-
-#### Як побудувати таблицю рішень
-
-1. List all conditions (inputs)
-2. List all actions (outputs/behaviors)
-3. Create columns for each combination of condition values
-4. Fill in the expected action for each combination
-
-#### Приклад: Система схвалення кредитів
-
-**Specification:** A bank approves loans based on three conditions:
-- Credit score: Good or Bad
-- Employment: Employed or Unemployed
-- Existing debt: Low or High
+Типовий конвеєр CI/CD має чотири основні етапи:
 
 ```
-Decision Table:
-
-                    Rule 1  Rule 2  Rule 3  Rule 4  Rule 5  Rule 6  Rule 7  Rule 8
-Conditions:
-  Credit Score       Good    Good    Good    Good    Bad     Bad     Bad     Bad
-  Employment         Yes     Yes     No      No      Yes     Yes     No      No
-  Low Debt           Yes     No      Yes     No      Yes     No      Yes     No
-
-Actions:
-  Approve Loan       Yes     Yes     Yes     No      Yes     No      No      No
-  Interest Rate      Low     Medium  Medium   -      High     -       -       -
+┌─────────────────────────────────────────────────────────────────┐
+│                        CI/CD Pipeline                           │
+│                                                                 │
+│  ┌─────────┐  ┌──────────┐  ┌───────────┐  ┌───────────────┐  │
+│  │  BUILD   │  │   TEST   │  │  ANALYZE  │  │    DEPLOY     │  │
+│  │         │  │          │  │           │  │               │  │
+│  │ Restore  │  │ Unit     │  │ Coverage  │  │ Staging       │  │
+│  │ Compile  │  │ Integr.  │  │ Linting   │  │ Production    │  │
+│  │ Publish  │  │ E2E      │  │ Security  │  │ Smoke tests   │  │
+│  └────┬────┘  └────┬─────┘  └─────┬─────┘  └───────┬───────┘  │
+│       │            │              │                 │           │
+│       ▼            ▼              ▼                 ▼           │
+│    Artifact     Results +      Reports          Running        │
+│    (.dll)       Reports        (HTML)           application     │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-```csharp
-// LoanApproval/LoanEvaluator.cs
-namespace LoanApproval;
-
-public enum CreditScore { Good, Bad }
-
-public record LoanApplication(
-    CreditScore CreditScore,
-    bool IsEmployed,
-    bool HasLowDebt);
-
-public record LoanDecision(
-    bool Approved,
-    string? InterestRate = null,
-    string? Reason = null);
-
-public class LoanEvaluator
-{
-    public LoanDecision Evaluate(LoanApplication app)
-    {
-        return (app.CreditScore, app.IsEmployed, app.HasLowDebt) switch
-        {
-            (CreditScore.Good, true,  true)  => new(true, "Low"),
-            (CreditScore.Good, true,  false) => new(true, "Medium"),
-            (CreditScore.Good, false, true)  => new(true, "Medium"),
-            (CreditScore.Good, false, false) => new(false, Reason: "Unemployed with high debt"),
-            (CreditScore.Bad,  true,  true)  => new(true, "High"),
-            (CreditScore.Bad,  true,  false) => new(false, Reason: "Bad credit with high debt"),
-            (CreditScore.Bad,  false, true)  => new(false, Reason: "Bad credit and unemployed"),
-            (CreditScore.Bad,  false, false) => new(false, Reason: "All risk factors present"),
-        };
-    }
-}
-```
-
-```csharp
-// LoanApproval.Tests/LoanEvaluatorTests.cs
-using Shouldly;
-
-namespace LoanApproval.Tests;
-
-public class LoanEvaluatorTests
-{
-    private readonly LoanEvaluator _sut = new();
-
-    // One test per decision table rule
-
-    [Theory]
-    [InlineData(CreditScore.Good, true,  true,  true,  "Low")]
-    [InlineData(CreditScore.Good, true,  false, true,  "Medium")]
-    [InlineData(CreditScore.Good, false, true,  true,  "Medium")]
-    [InlineData(CreditScore.Good, false, false, false, null)]
-    [InlineData(CreditScore.Bad,  true,  true,  true,  "High")]
-    [InlineData(CreditScore.Bad,  true,  false, false, null)]
-    [InlineData(CreditScore.Bad,  false, true,  false, null)]
-    [InlineData(CreditScore.Bad,  false, false, false, null)]
-    public void Evaluate_DecisionTableRule_ReturnsExpectedDecision(
-        CreditScore credit, bool employed, bool lowDebt,
-        bool expectedApproved, string? expectedRate)
-    {
-        // Arrange
-        var application = new LoanApplication(credit, employed, lowDebt);
-
-        // Act
-        var decision = _sut.Evaluate(application);
-
-        // Assert
-        decision.Approved.ShouldBe(expectedApproved);
-        if (expectedApproved)
-            decision.InterestRate.ShouldBe(expectedRate);
-    }
-}
-```
-
-**When to use:** Decision tables are ideal when the specification contains complex business rules with multiple interacting conditions (2-4 conditions). With *n* boolean conditions, there are 2^n rules — the table grows exponentially, so it works best for a moderate number of conditions.
-
-### 2.4 Тестування переходів станів
-
-#### Ідея
-
-Many systems have behavior that depends on their **current state** and the **event** that occurs. State transition testing models these as a state machine and derives tests to cover transitions.
-
-#### Компоненти моделі станів
-
-```
-┌───────────┐   event [condition] / action   ┌───────────┐
-│  State A  │ ─────────────────────────────► │  State B  │
-└───────────┘                                └───────────┘
-```
-
-- **States:** the possible conditions the system can be in
-- **Transitions:** changes from one state to another
-- **Events:** triggers that cause transitions
-- **Guards:** conditions that must be true for a transition to fire
-- **Actions:** operations performed during a transition
-
-#### Приклад: Життєвий цикл замовлення
-
-```
-                    ┌──────────────────────────────────────────────┐
-                    │                                              │
-                    ▼                                              │
- ┌─────────┐  place   ┌─────────┐  pay     ┌──────┐  ship   ┌────────┐
- │  Draft   │────────►│ Pending  │────────►│ Paid  │───────►│ Shipped │
- └─────────┘         └─────────┘         └──────┘        └────────┘
-                          │                   │                │
-                    cancel│             cancel│          deliver│
-                          ▼                   ▼                ▼
-                    ┌───────────┐       ┌───────────┐   ┌───────────┐
-                    │ Cancelled │       │ Cancelled │   │ Delivered │
-                    └───────────┘       └───────────┘   └───────────┘
-```
-
-**State Transition Table:**
-
-| Current State | Event | Next State | Action |
-|---|---|---|---|
-| Draft | Place | Pending | Create order record |
-| Pending | Pay | Paid | Record payment |
-| Pending | Cancel | Cancelled | Release items |
-| Paid | Ship | Shipped | Generate tracking |
-| Paid | Cancel | Cancelled | Issue refund |
-| Shipped | Deliver | Delivered | Confirm delivery |
-
-```csharp
-// OrderLifecycle/Order.cs
-namespace OrderLifecycle;
-
-public enum OrderState { Draft, Pending, Paid, Shipped, Delivered, Cancelled }
-
-public class Order
-{
-    public OrderState State { get; private set; } = OrderState.Draft;
-
-    public void Place()
-    {
-        if (State != OrderState.Draft)
-            throw new InvalidOperationException(
-                $"Cannot place order in {State} state.");
-        State = OrderState.Pending;
-    }
-
-    public void Pay()
-    {
-        if (State != OrderState.Pending)
-            throw new InvalidOperationException(
-                $"Cannot pay for order in {State} state.");
-        State = OrderState.Paid;
-    }
-
-    public void Ship()
-    {
-        if (State != OrderState.Paid)
-            throw new InvalidOperationException(
-                $"Cannot ship order in {State} state.");
-        State = OrderState.Shipped;
-    }
-
-    public void Deliver()
-    {
-        if (State != OrderState.Shipped)
-            throw new InvalidOperationException(
-                $"Cannot deliver order in {State} state.");
-        State = OrderState.Delivered;
-    }
-
-    public void Cancel()
-    {
-        if (State != OrderState.Pending && State != OrderState.Paid)
-            throw new InvalidOperationException(
-                $"Cannot cancel order in {State} state.");
-        State = OrderState.Cancelled;
-    }
-}
-```
-
-```csharp
-// OrderLifecycle.Tests/OrderStateTransitionTests.cs
-using Shouldly;
-
-namespace OrderLifecycle.Tests;
-
-public class OrderStateTransitionTests
-{
-    // --- Valid Transitions (from state transition table) ---
-
-    [Fact]
-    public void Place_FromDraft_TransitionsToPending()
-    {
-        var order = new Order();
-        order.Place();
-        order.State.ShouldBe(OrderState.Pending);
-    }
-
-    [Fact]
-    public void Pay_FromPending_TransitionsToPaid()
-    {
-        var order = new Order();
-        order.Place();
-        order.Pay();
-        order.State.ShouldBe(OrderState.Paid);
-    }
-
-    [Fact]
-    public void Ship_FromPaid_TransitionsToShipped()
-    {
-        var order = new Order();
-        order.Place();
-        order.Pay();
-        order.Ship();
-        order.State.ShouldBe(OrderState.Shipped);
-    }
-
-    [Fact]
-    public void Deliver_FromShipped_TransitionsToDelivered()
-    {
-        var order = new Order();
-        order.Place();
-        order.Pay();
-        order.Ship();
-        order.Deliver();
-        order.State.ShouldBe(OrderState.Delivered);
-    }
-
-    [Fact]
-    public void Cancel_FromPending_TransitionsToCancelled()
-    {
-        var order = new Order();
-        order.Place();
-        order.Cancel();
-        order.State.ShouldBe(OrderState.Cancelled);
-    }
-
-    [Fact]
-    public void Cancel_FromPaid_TransitionsToCancelled()
-    {
-        var order = new Order();
-        order.Place();
-        order.Pay();
-        order.Cancel();
-        order.State.ShouldBe(OrderState.Cancelled);
-    }
-
-    // --- Invalid Transitions (negative testing) ---
-
-    [Fact]
-    public void Pay_FromDraft_ThrowsException()
-    {
-        var order = new Order();
-        Should.Throw<InvalidOperationException>(() => order.Pay());
-    }
-
-    [Fact]
-    public void Ship_FromPending_ThrowsException()
-    {
-        var order = new Order();
-        order.Place();
-        Should.Throw<InvalidOperationException>(() => order.Ship());
-    }
-
-    [Fact]
-    public void Cancel_FromDelivered_ThrowsException()
-    {
-        var order = new Order();
-        order.Place();
-        order.Pay();
-        order.Ship();
-        order.Deliver();
-        Should.Throw<InvalidOperationException>(() => order.Cancel());
-    }
-
-    // --- Full Path: Happy Path ---
-
-    [Fact]
-    public void FullLifecycle_DraftToDelivered_AllTransitionsSucceed()
-    {
-        var order = new Order();
-        order.State.ShouldBe(OrderState.Draft);
-
-        order.Place();
-        order.State.ShouldBe(OrderState.Pending);
-
-        order.Pay();
-        order.State.ShouldBe(OrderState.Paid);
-
-        order.Ship();
-        order.State.ShouldBe(OrderState.Shipped);
-
-        order.Deliver();
-        order.State.ShouldBe(OrderState.Delivered);
-    }
-}
-```
-
-#### Рівні покриття для тестування переходів станів
-
-| Level | What it covers | Minimum tests |
+| Stage | Purpose | Tools (in this course) |
 |---|---|---|
-| **All states** | Every state is visited at least once | Few tests |
-| **All transitions (0-switch)** | Every valid transition is exercised | One test per transition |
-| **All transition pairs (1-switch)** | Every pair of consecutive transitions | More tests |
-| **Invalid transitions** | Every event from every state where it is not allowed | Many negative tests |
+| **Build** | Compile code, restore dependencies | `dotnet restore`, `dotnet build` |
+| **Test** | Run automated tests at all levels | `dotnet test`, xUnit v3 |
+| **Analyze** | Measure quality metrics | Coverlet, ReportGenerator, Roslyn analyzers |
+| **Deploy** | Release to an environment | GitHub Actions deploy steps, Docker |
 
-### 2.5 Попарне (комбінаторне) тестування
-
-#### Проблема
-
-When a system has multiple input parameters, testing all combinations grows exponentially:
-
-| Parameters | Values each | All combinations |
-|---|---|---|
-| 3 | 3 | 27 |
-| 4 | 3 | 81 |
-| 5 | 4 | 1,024 |
-| 10 | 3 | 59,049 |
-
-#### Ключове спостереження
-
-Most defects are triggered by the interaction of **two** parameters (pairwise), not three or more. Studies by Kuhn, Wallace, and Gallo (NIST) found that:
-- 70% of defects involve a single parameter
-- 90% of defects are triggered by pairwise interactions
-- 98% of defects are triggered by interactions of three or fewer parameters
-
-#### Як працює попарне тестування
-
-Instead of testing all combinations, pairwise testing generates a **minimal set of test cases** that covers every pair of parameter values at least once.
-
-**Example:** A search function has three parameters:
-- **Category:** Books, Electronics, Clothing
-- **Sort By:** Price, Rating, Date
-- **In Stock:** Yes, No
-
-All combinations = 3 x 3 x 2 = 18 test cases.
-
-Pairwise set (covers all pairs):
-
-| Test | Category | Sort By | In Stock |
-|---|---|---|---|
-| 1 | Books | Price | Yes |
-| 2 | Books | Rating | No |
-| 3 | Books | Date | Yes |
-| 4 | Electronics | Price | No |
-| 5 | Electronics | Rating | Yes |
-| 6 | Electronics | Date | No |
-| 7 | Clothing | Price | Yes |
-| 8 | Clothing | Rating | No |
-| 9 | Clothing | Date | Yes |
-
-**9 test cases** instead of 18 — and every pair of values appears at least once. For larger parameter spaces, the reduction is dramatic.
-
-#### Інструменти для генерації попарних тестів
-
-- **PICT** (Microsoft, open-source): command-line tool for pairwise generation
-- **AllPairs** by James Bach
-- Online generators (e.g., pairwise.org)
-
-```
-# PICT model file (search.pict)
-Category: Books, Electronics, Clothing
-SortBy:   Price, Rating, Date
-InStock:  Yes, No
-
-# Run: pict search.pict
-# Output: minimal pairwise test set
-```
-
-```csharp
-// Generated pairwise tests
-public class SearchPairwiseTests
-{
-    [Theory]
-    [InlineData("Books",       "Price",  true)]
-    [InlineData("Books",       "Rating", false)]
-    [InlineData("Books",       "Date",   true)]
-    [InlineData("Electronics", "Price",  false)]
-    [InlineData("Electronics", "Rating", true)]
-    [InlineData("Electronics", "Date",   false)]
-    [InlineData("Clothing",    "Price",  true)]
-    [InlineData("Clothing",    "Rating", false)]
-    [InlineData("Clothing",    "Date",   true)]
-    public void Search_PairwiseCombination_ReturnsResults(
-        string category, string sortBy, bool inStock)
-    {
-        // Arrange
-        var searchService = new SearchService();
-
-        // Act
-        var results = searchService.Search(category, sortBy, inStock);
-
-        // Assert
-        results.ShouldNotBeNull();
-    }
-}
-```
-
-> **Discussion (10 min):** For a web form with 5 dropdown fields, each with 4 options, the total combinations are 4^5 = 1,024. How many pairwise test cases do you think would be needed? (Answer: typically around 16-20.)
+> **Discussion (5 min):** Which stage do you think fails most often in real projects? Why?
 
 ---
 
-## 3. Техніки проєктування тестів методом білої скриньки
+## 3. Основи GitHub Actions
 
-Техніки білої скриньки використовують знання внутрішньої структури коду для проєктування тестів. Мета — забезпечити, щоб конкретні структурні елементи були задіяні під час тестування.
+### 3.1 Що таке GitHub Actions?
 
-### 3.1 Граф потоку управління (CFG)
+GitHub Actions — це CI/CD-платформа, вбудована в GitHub. Вона дозволяє автоматизувати робочі процеси безпосередньо з вашого репозиторію.
 
-Before discussing coverage criteria, we need to understand control flow graphs — visual representations of all paths through a function.
-
-```csharp
-public string ClassifyTriangle(int a, int b, int c)  // Node 1: Entry
-{
-    if (a <= 0 || b <= 0 || c <= 0)                   // Node 2: Condition
-        return "Invalid";                              // Node 3
-
-    if (a + b <= c || a + c <= b || b + c <= a)        // Node 4: Condition
-        return "Not a triangle";                       // Node 5
-
-    if (a == b && b == c)                              // Node 6: Condition
-        return "Equilateral";                          // Node 7
-
-    if (a == b || b == c || a == c)                    // Node 8: Condition
-        return "Isosceles";                            // Node 9
-
-    return "Scalene";                                  // Node 10
-}                                                      // Node 11: Exit
-```
+Ключові концепції:
 
 ```
-Control Flow Graph:
-
-        [1: Entry]
-            │
-            ▼
-     ┌──[2: a<=0||b<=0||c<=0]──┐
-     │ true                    │ false
-     ▼                         ▼
-  [3: "Invalid"]      [4: not-a-triangle?]──┐
-     │                │ false               │ true
-     │                ▼                     ▼
-     │        [6: a==b && b==c]──┐    [5: "Not a triangle"]
-     │        │ false            │ true     │
-     │        ▼                  ▼          │
-     │   [8: a==b||b==c||a==c] [7: "Equilateral"]
-     │    │ false    │ true      │          │
-     │    ▼          ▼           │          │
-     │ [10:"Scalene"] [9:"Isosceles"]      │
-     │    │          │           │          │
-     │    └────┬─────┘───────┬──┘──────────┘
-     │         │             │
-     └─────────┴─────────────┘
-                    │
-                    ▼
-              [11: Exit]
+┌─────────────────────────────────────────────────────┐
+│  Workflow (.github/workflows/*.yml)                 │
+│                                                     │
+│  Triggered by: push, pull_request, schedule, etc.   │
+│                                                     │
+│  ┌───────────────────────────────────────────────┐  │
+│  │  Job: build-and-test                          │  │
+│  │  runs-on: ubuntu-latest                       │  │
+│  │                                               │  │
+│  │  ┌─────────┐ ┌─────────┐ ┌────────────────┐  │  │
+│  │  │ Step 1  │ │ Step 2  │ │    Step 3      │  │  │
+│  │  │Checkout │►│ Setup   │►│  Build & Test  │  │  │
+│  │  │  code   │ │  .NET   │ │                │  │  │
+│  │  └─────────┘ └─────────┘ └────────────────┘  │  │
+│  └───────────────────────────────────────────────┘  │
+│                                                     │
+│  ┌───────────────────────────────────────────────┐  │
+│  │  Job: deploy (depends on build-and-test)      │  │
+│  │  ...                                          │  │
+│  └───────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────┘
 ```
 
-### 3.2 Покриття операторів
-
-#### Визначення
-
-**Statement coverage** measures the percentage of executable statements that are exercised by the test suite.
-
-```
-                    Statements executed by tests
-Statement Coverage = ─────────────────────────── x 100%
-                     Total executable statements
-```
-
-#### Приклад
-
-```csharp
-public decimal CalculateDiscount(decimal price, bool isMember, int quantity)
-{
-    decimal discount = 0;                    // Statement 1
-
-    if (isMember)                            // Statement 2 (branch)
-    {
-        discount = 0.10m;                    // Statement 3
-    }
-
-    if (quantity > 10)                       // Statement 4 (branch)
-    {
-        discount += 0.05m;                   // Statement 5
-    }
-
-    return price * (1 - discount);           // Statement 6
-}
-```
-
-**One test case for 100% statement coverage:**
-
-```csharp
-[Fact]
-public void CalculateDiscount_MemberWithBulk_AppliesBothDiscounts()
-{
-    // isMember = true, quantity = 20
-    // Executes: S1, S2(true), S3, S4(true), S5, S6
-    var result = _sut.CalculateDiscount(100m, true, 20);
-    result.ShouldBe(85m); // 100 * (1 - 0.15)
-}
-```
-
-This single test executes all 6 statements — 100% statement coverage. But it misses the case where `isMember` is false, or where `quantity <= 10`. **Statement coverage is the weakest structural criterion.**
-
-### 3.3 Branch (Decision) Coverage
-
-#### Визначення
-
-**Branch coverage** measures the percentage of branches (decision outcomes) that are exercised. Every `if`, `else`, `switch case`, loop entry/exit counts as a decision.
-
-```
-                 Branches executed by tests
-Branch Coverage = ────────────────────────── x 100%
-                   Total branches
-```
-
-#### Приклад (same code)
-
-The code has 4 branches:
-- `if (isMember)` — true branch and false branch
-- `if (quantity > 10)` — true branch and false branch
-
-**Minimum tests for 100% branch coverage:**
-
-```csharp
-[Fact]
-public void CalculateDiscount_MemberWithBulk_AppliesBothDiscounts()
-{
-    // isMember=true (T), quantity=20 (T)
-    // Covers: Branch 1 True, Branch 2 True
-    var result = _sut.CalculateDiscount(100m, true, 20);
-    result.ShouldBe(85m);
-}
-
-[Fact]
-public void CalculateDiscount_NonMemberSmallOrder_NoDiscount()
-{
-    // isMember=false (F), quantity=5 (F)
-    // Covers: Branch 1 False, Branch 2 False
-    var result = _sut.CalculateDiscount(100m, false, 5);
-    result.ShouldBe(100m);
-}
-```
-
-Two test cases achieve 100% branch coverage. Note that 100% branch coverage **implies** 100% statement coverage, but not vice versa.
-
-```
-Coverage Hierarchy:
-
-Path Coverage (strongest)
-    │
-    ├── implies ──► MC/DC Coverage
-    │                   │
-    │                   ├── implies ──► Condition Coverage
-    │                   │
-    │                   └── implies ──► Branch Coverage
-    │                                       │
-    │                                       └── implies ──► Statement Coverage (weakest)
-    │
-    └── (Path coverage implies all of the above)
-```
-
-### 3.4 Condition Coverage
-
-#### Визначення
-
-**Condition coverage** measures whether each individual boolean sub-expression (atomic condition) in a decision has been evaluated to both `true` and `false`.
-
-#### Приклад
-
-```csharp
-if (age >= 18 && hasConsent)    // Two atomic conditions: (age >= 18), (hasConsent)
-{
-    AllowAccess();
-}
-```
-
-For 100% condition coverage, each atomic condition must be both true and false:
-
-| Test | age >= 18 | hasConsent | Decision |
-|---|---|---|---|
-| 1 | true (age=20) | false | false |
-| 2 | false (age=16) | true | false |
-
-Both atomic conditions have been true and false, so condition coverage = 100%. But notice: the decision was **never true** — `AllowAccess()` was never called. This shows that **condition coverage does not imply branch coverage**.
-
-To address this, we often use **condition/decision coverage** — requiring both condition coverage and branch/decision coverage.
-
-### 3.5 MC/DC (Modified Condition/Decision Coverage)
-
-#### Визначення
-
-MC/DC requires that:
-1. Every entry and exit point is invoked
-2. Every decision takes every possible outcome (branch coverage)
-3. Every condition in a decision takes every possible outcome (condition coverage)
-4. Each condition is shown to **independently affect** the decision outcome
-
-Point 4 is the key: for each condition, there must be two test cases where that condition changes while all other conditions remain the same, and the decision outcome changes.
-
-#### Why MC/DC Matters
-
-MC/DC is required by **DO-178C** (avionics software safety standard) for Level A (catastrophic failure consequences). It provides strong confidence that each condition genuinely contributes to the logic.
-
-#### Приклад
-
-```csharp
-if (engineRunning && fuelAboveMinimum && noWarningLights)
-{
-    AllowTakeoff();
-}
-```
-
-Three conditions: A = `engineRunning`, B = `fuelAboveMinimum`, C = `noWarningLights`.
-
-For MC/DC, we need to show each condition independently affects the outcome:
-
-| Test | A | B | C | Decision | Demonstrates |
-|---|---|---|---|---|---|
-| 1 | T | T | T | T | (baseline - all true) |
-| 2 | **F** | T | T | **F** | A independently affects decision |
-| 3 | T | **F** | T | **F** | B independently affects decision |
-| 4 | T | T | **F** | **F** | C independently affects decision |
-
-Only **4 test cases** for 3 conditions (N+1 in the best case), compared to 8 for exhaustive testing of all combinations. For decisions with many conditions, this is a significant reduction.
-
-### 3.6 Path Coverage
-
-#### Визначення
-
-**Path coverage** requires that every possible path through the function is exercised. A path is a unique sequence of statements from entry to exit.
-
-#### Приклад
-
-```csharp
-public decimal CalculateDiscount(decimal price, bool isMember, int quantity)
-{
-    decimal discount = 0;
-
-    if (isMember)           // Decision 1
-        discount = 0.10m;
-
-    if (quantity > 10)      // Decision 2
-        discount += 0.05m;
-
-    return price * (1 - discount);
-}
-```
-
-**Paths through the code:**
-
-| Path | Decision 1 | Decision 2 | Discount |
-|---|---|---|---|
-| Path 1 | false | false | 0% |
-| Path 2 | false | true | 5% |
-| Path 3 | true | false | 10% |
-| Path 4 | true | true | 15% |
-
-```csharp
-[Theory]
-[InlineData(false, 5,  100)]     // Path 1: no discounts
-[InlineData(false, 20, 95)]      // Path 2: bulk only
-[InlineData(true,  5,  90)]      // Path 3: member only
-[InlineData(true,  20, 85)]      // Path 4: both discounts
-public void CalculateDiscount_AllPaths_ReturnsExpectedAmount(
-    bool isMember, int quantity, decimal expected)
-{
-    _sut.CalculateDiscount(100m, isMember, quantity).ShouldBe(expected);
-}
-```
-
-#### Проблема with Path Coverage
-
-For code with loops, path coverage can be **infinite**:
-
-```csharp
-while (hasMoreItems)   // Loop can execute 0, 1, 2, ... N times
-{
-    ProcessItem();     // Each iteration count is a different path
-}
-```
-
-This makes 100% path coverage impractical for most real-world code. It is mainly useful for critical, loop-free functions.
-
-### 3.7 Comparison of White-Box Coverage Criteria
-
-| Criterion | Strength | Required Tests | Practical? | Used In |
-|---|---|---|---|---|
-| Statement | Weakest | Fewest | Yes | Minimum standard |
-| Branch | Moderate | More | Yes | Industry standard |
-| Condition | Moderate | Moderate | Yes | With branch coverage |
-| MC/DC | Strong | N+1 per decision | Yes | Avionics (DO-178C) |
-| Path | Strongest | Can be infinite | Limited | Critical functions |
-
-> **Discussion (10 min):** A safety-critical medical device has a function with 5 boolean conditions in one decision. How many test cases would exhaustive testing need? (32) How many for MC/DC? (6) Why does this matter in regulated industries?
-
----
-
-## 4. Code Coverage in Practice
-
-### 4.1 What Code Coverage Measures
-
-Code coverage is a **metric** that indicates how much of your code is exercised by your test suite. Common metrics include:
-
-| Metric | Measures | Typical tool output |
-|---|---|---|
-| Line coverage | Lines of code executed | 85% of lines executed |
-| Branch coverage | Decision outcomes taken | 72% of branches executed |
-| Method coverage | Methods entered | 95% of methods called |
-
-### 4.2 What Code Coverage Does NOT Measure
-
-Coverage is a **necessary but insufficient** indicator of test quality. High coverage does not mean good tests.
-
-```csharp
-// This test achieves 100% line coverage of the Add method:
-[Fact]
-public void Add_Executes_WithoutError()
-{
-    var result = _sut.Add(2, 3);
-    // No assertion! The test "covers" the code but verifies nothing.
-}
-```
-
-**Coverage does not tell you:**
-- Whether your assertions are correct or meaningful
-- Whether you are testing the right thing
-- Whether important edge cases are covered
-- Whether the specification is correct
-- Whether non-functional requirements (performance, security) are met
-
-```
-                        What coverage tells you:
-                    ┌─────────────────────────────────┐
-                    │  "These lines were executed      │
-                    │   during testing."               │
-                    └─────────────────────────────────┘
-
-                    What coverage does NOT tell you:
-                    ┌─────────────────────────────────┐
-                    │  "These lines are correct."      │
-                    │  "All important behaviors         │
-                    │   are verified."                  │
-                    │  "The software is bug-free."      │
-                    └─────────────────────────────────┘
-```
-
-> **Important:** Low coverage is a reliable signal — it tells you that untested code exists. But high coverage is an unreliable signal — it does not guarantee that the code is well-tested.
-
-### 4.3 Coverlet: Collecting Coverage in .NET
-
-**Coverlet** is the standard code coverage tool for .NET. It instruments your assemblies and records which lines and branches are executed during testing.
-
-#### Setup
-
-```bash
-# Add the Coverlet collector to your test project
-cd YourSolution.Tests
-dotnet add package coverlet.collector
-```
-
-This adds the NuGet package that integrates with `dotnet test` via a data collector.
-
-#### Collecting Coverage
-
-```bash
-# Run tests with coverage collection (outputs Cobertura XML)
-dotnet test --collect:"XPlat Code Coverage" --results-directory ./coverage
-```
-
-This produces a file at:
-```
-./coverage/<guid>/coverage.cobertura.xml
-```
-
-#### Coverage Output Formats
-
-Coverlet supports multiple output formats:
-
-| Format | Use Case |
+| Concept | Description |
 |---|---|
-| `cobertura` | Default; widely supported by CI tools and report generators |
-| `opencover` | Alternative XML format; compatible with many tools |
-| `lcov` | Used by some IDE extensions and web-based tools |
-| `json` | Programmatic access to coverage data |
+| **Workflow** | A YAML file that defines an automated process |
+| **Event/Trigger** | What starts the workflow (push, PR, schedule) |
+| **Job** | A set of steps that run on the same runner |
+| **Step** | A single task — either a shell command or an action |
+| **Action** | A reusable unit of code (e.g., `actions/checkout@v6`) |
+| **Runner** | The virtual machine that executes the job |
 
-To specify a format explicitly:
+### 3.2 Структура файлу робочого процесу
 
-```bash
-dotnet test --collect:"XPlat Code Coverage" \
-  --results-directory ./coverage \
-  -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
-```
-
-#### Excluding Code from Coverage
-
-Not all code needs coverage measurement. You can exclude generated code, configuration, and boilerplate:
-
-```bash
-# Exclude specific namespaces or classes via runsettings
-dotnet test --collect:"XPlat Code Coverage" \
-  -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Exclude="[*]*.Migrations.*"
-```
-
-Or use the `[ExcludeFromCodeCoverage]` attribute in C#:
-
-```csharp
-using System.Diagnostics.CodeAnalysis;
-
-[ExcludeFromCodeCoverage]
-public class Program
-{
-    public static void Main(string[] args) { /* ... */ }
-}
-```
-
-### 4.4 ReportGenerator: Visualizing Coverage
-
-Raw XML coverage files are not human-readable. **ReportGenerator** converts them into visual HTML reports.
-
-#### Setup
-
-```bash
-# Install ReportGenerator as a global .NET tool (one-time)
-dotnet tool install --global dotnet-reportgenerator-globaltool
-```
-
-#### Generating Reports
-
-```bash
-# Generate an HTML report from Cobertura XML
-reportgenerator \
-  -reports:./coverage/**/coverage.cobertura.xml \
-  -targetdir:./coverage/report \
-  -reporttypes:"Html;TextSummary"
-
-# View the text summary in the terminal
-cat ./coverage/report/Summary.txt
-
-# Open the full HTML report in a browser
-open ./coverage/report/index.html    # macOS
-# xdg-open ./coverage/report/index.html  # Linux
-# start ./coverage/report/index.html     # Windows
-```
-
-#### Full Workflow: Test, Collect, Report
-
-Here is the complete sequence from running tests to viewing the report:
-
-```bash
-# Step 1: Clean previous results
-rm -rf ./coverage
-
-# Step 2: Run tests with coverage collection
-dotnet test --collect:"XPlat Code Coverage" --results-directory ./coverage
-
-# Step 3: Generate HTML report
-reportgenerator \
-  -reports:./coverage/**/coverage.cobertura.xml \
-  -targetdir:./coverage/report \
-  -reporttypes:"Html;TextSummary"
-
-# Step 4: View summary
-cat ./coverage/report/Summary.txt
-
-# Step 5: Open detailed report
-open ./coverage/report/index.html
-```
-
-### 4.5 Interpreting Coverage Reports
-
-A typical ReportGenerator HTML report shows:
-
-```
-Coverage Summary
-═══════════════════════════════════════════════════
-Assembly          Line Coverage    Branch Coverage
-───────────────────────────────────────────────────
-MyApp.Core        87.3%           72.1%
-MyApp.Services    92.5%           85.4%
-MyApp.Api         45.2%           30.0%
-───────────────────────────────────────────────────
-Total             78.6%           65.8%
-═══════════════════════════════════════════════════
-```
-
-The HTML report provides file-by-file drill-down with color-coded source lines:
-
-```
-Line highlighting in the report:
-
-  ██  Green   = line was executed by tests
-  ██  Red     = line was NOT executed by tests
-  ██  Yellow  = line was partially covered (some branches taken, others not)
-```
-
-**What to look for:**
-
-1. **Red lines in critical code** — business logic, validation, error handling that is never tested
-2. **Yellow lines** — decisions where only one branch is taken (e.g., `if` block tested but `else` never executed)
-3. **Overall trends** — is coverage improving over time or declining?
-4. **Coverage by module** — are some areas significantly under-tested?
-
-### 4.6 Coverage Thresholds and CI Integration
-
-#### Setting Thresholds
-
-You can enforce minimum coverage thresholds to prevent coverage from dropping:
-
-```bash
-# Fail the build if line coverage drops below 80%
-dotnet test --collect:"XPlat Code Coverage" \
-  -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Threshold=80
-```
-
-#### Recommended Thresholds
-
-| Context | Line Coverage | Branch Coverage |
-|---|---|---|
-| New project (starting out) | 60% | 40% |
-| Established project | 80% | 60% |
-| Critical business logic | 90%+ | 80%+ |
-| Safety-critical systems | 100% statement + MC/DC | Required by standard |
-
-**Important:** Treat thresholds as a **floor, not a ceiling**. The goal is not to hit 80% — the goal is to write good tests that happen to achieve high coverage.
-
-#### GitHub Actions Integration
+Файли робочих процесів знаходяться в `.github/workflows/` і використовують YAML-синтаксис:
 
 ```yaml
-# .github/workflows/test.yml
-name: Test with Coverage
+# .github/workflows/ci.yml
 
-on: [push, pull_request]
+name: CI Pipeline                  # Display name in GitHub UI
 
+on:                                # Triggers
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:                              # One or more jobs
+  build-and-test:                  # Job identifier
+    runs-on: ubuntu-latest         # Runner OS
+
+    steps:                         # Sequential steps
+      - name: Checkout code
+        uses: actions/checkout@v6  # Use a pre-built action
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --no-restore --configuration Release
+
+      - name: Run tests
+        run: dotnet test --no-build --configuration Release --verbosity normal
+```
+
+### 3.3 Тригери (події)
+
+GitHub Actions підтримує багато тригерних подій. Найпоширеніші для CI:
+
+```yaml
+on:
+  # Trigger on push to specific branches
+  push:
+    branches: [ main, develop ]
+    paths-ignore:
+      - '**.md'              # Don't trigger on documentation changes
+      - 'docs/**'
+
+  # Trigger on pull requests
+  pull_request:
+    branches: [ main ]
+    types: [ opened, synchronize, reopened ]
+
+  # Scheduled trigger (cron syntax)
+  schedule:
+    - cron: '0 6 * * 1'     # Every Monday at 6:00 AM UTC
+
+  # Manual trigger from GitHub UI
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+```
+
+#### Довідник синтаксису Cron
+
+```
+┌───────── minute (0-59)
+│ ┌─────── hour (0-23)
+│ │ ┌───── day of month (1-31)
+│ │ │ ┌─── month (1-12)
+│ │ │ │ ┌─ day of week (0-6, Sunday=0)
+│ │ │ │ │
+* * * * *
+
+Examples:
+'0 6 * * 1'        Every Monday at 6:00 AM
+'0 0 * * *'        Every day at midnight
+'*/15 * * * *'     Every 15 minutes
+'0 8 1 * *'        First day of every month at 8:00 AM
+```
+
+### 3.4 Завдання та кроки
+
+Завдання виконуються паралельно за замовчуванням. Використовуйте `needs` для створення залежностей:
+
+```yaml
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - run: dotnet build
+
+  unit-tests:
+    needs: build                   # Runs after 'build' completes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - run: dotnet test --filter "Category=Unit"
+
+  integration-tests:
+    needs: build                   # Runs after 'build', parallel with unit-tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - run: dotnet test --filter "Category=Integration"
+
+  deploy:
+    needs: [unit-tests, integration-tests]  # Runs after BOTH test jobs pass
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Deploying..."
+```
+
+Це створює наступний граф виконання:
+
+```
+              ┌──────────────┐
+              │    build     │
+              └──────┬───────┘
+                     │
+            ┌────────┴────────┐
+            ▼                 ▼
+   ┌──────────────┐  ┌────────────────────┐
+   │  unit-tests  │  │ integration-tests  │
+   └──────┬───────┘  └────────┬───────────┘
+          │                   │
+          └────────┬──────────┘
+                   ▼
+            ┌────────────┐
+            │   deploy   │
+            └────────────┘
+```
+
+### 3.5 Матричні збірки
+
+Матричні збірки дозволяють тестувати на кількох конфігураціях одночасно:
+
+```yaml
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        dotnet-version: ['9.0.x', '10.0.x']
+      fail-fast: false           # Continue other matrix jobs if one fails
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup .NET ${{ matrix.dotnet-version }}
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ matrix.dotnet-version }}
+
+      - name: Run tests
+        run: dotnet test --verbosity normal
+```
+
+This creates **6 parallel jobs** (3 OS x 2 .NET versions):
+
+```
+┌──────────────────────────────────────────────────────────┐
+│  Matrix: 3 OS × 2 .NET versions = 6 jobs                │
+│                                                          │
+│  ubuntu  + .NET 9   │  windows + .NET 9   │  macos + .NET 9 │
+│  ubuntu  + .NET 10  │  windows + .NET 10  │  macos + .NET 10│
+└──────────────────────────────────────────────────────────┘
+```
+
+Ви також можете виключити конкретні комбінації:
+
+```yaml
+strategy:
+  matrix:
+    os: [ubuntu-latest, windows-latest, macos-latest]
+    dotnet-version: ['9.0.x', '10.0.x']
+    exclude:
+      - os: macos-latest
+        dotnet-version: '9.0.x'    # Skip .NET 10 on macOS
+```
+
+### 3.6 Кешування NuGet-пакетів
+
+Кешування прискорює збірки шляхом повторного використання завантажених залежностей:
+
+```yaml
+steps:
+  - uses: actions/checkout@v6
+
+  - name: Setup .NET
+    uses: actions/setup-dotnet@v4
+    with:
+      dotnet-version: '10.0.x'
+
+  - name: Cache NuGet packages
+    uses: actions/cache@v5
+    with:
+      path: ~/.nuget/packages
+      key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+      restore-keys: |
+        ${{ runner.os }}-nuget-
+
+  - name: Restore dependencies
+    run: dotnet restore
+
+  - name: Build
+    run: dotnet build --no-restore
+```
+
+Як працює кешування:
+
+```
+First run:                           Subsequent runs:
+┌─────────────────────┐              ┌─────────────────────┐
+│ Cache miss          │              │ Cache hit            │
+│                     │              │                      │
+│ dotnet restore      │              │ Restore from cache   │
+│ (downloads ~200MB)  │              │ (~3 seconds)         │
+│ Takes: ~45 seconds  │              │                      │
+│                     │              │ dotnet restore       │
+│ Save to cache       │              │ (nothing to do)      │
+└─────────────────────┘              └──────────────────────┘
+```
+
+The cache key uses `hashFiles('**/*.csproj')` so the cache is invalidated whenever project dependencies change.
+
+### 3.7 Артефакти
+
+Артефакти дозволяють зберігати дані з запуску робочого процесу — такі як результати тестів, звіти покриття або результати збірки:
+
+```yaml
+steps:
+  - name: Run tests with results
+    run: dotnet test --logger "trx;LogFileName=test-results.trx" --results-directory ./test-results
+
+  - name: Upload test results
+    uses: actions/upload-artifact@v4
+    if: always()                    # Upload even if tests fail
+    with:
+      name: test-results
+      path: ./test-results/*.trx
+      retention-days: 30            # Keep for 30 days
+
+  - name: Upload build output
+    uses: actions/upload-artifact@v4
+    with:
+      name: build-artifacts
+      path: |
+        src/**/bin/Release/**
+        !src/**/obj/**
+```
+
+Артефакти можна завантажити з UI GitHub Actions або використати в наступних завданнях:
+
+```yaml
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - run: dotnet publish -c Release -o ./publish
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app
+          path: ./publish
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: app
+          path: ./app
+      - run: echo "Deploying from ./app"
+```
+
+> **Discussion (5 min):** What artifacts would be most useful for your team to keep from each CI run? How long should they be retained?
+
+---
+
+## 4. Запуск .NET тестів у GitHub Actions
+
+### 4.1 Базовий робочий процес тестування .NET
+
+Ось повний, готовий до продакшну робочий процес для .NET-проєкту:
+
+```yaml
+# .github/workflows/dotnet-ci.yml
+
+name: .NET CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  DOTNET_VERSION: '9.0.x'
+  DOTNET_NOLOGO: true                  # Suppress .NET welcome message
+  DOTNET_CLI_TELEMETRY_OPTOUT: true    # Disable telemetry
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup .NET ${{ env.DOTNET_VERSION }}
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v5
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --no-restore --configuration Release
+
+      - name: Run tests
+        run: >
+          dotnet test
+          --no-build
+          --configuration Release
+          --verbosity normal
+          --logger "trx;LogFileName=test-results.trx"
+          --results-directory ./test-results
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results
+          path: ./test-results/**/*.trx
+```
+
+### 4.2 Розуміння виводу тестів у CI
+
+Коли тести виконуються в CI, вивід з'являється в логах робочого процесу:
+
+```
+Run dotnet test --no-build --configuration Release --verbosity normal
+
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+  Calculator -> /home/runner/work/project/src/Calculator/bin/Release/net10.0/Calculator.dll
+  Calculator.Tests -> /home/runner/work/project/tests/Calculator.Tests/bin/Release/net10.0/Calculator.Tests.dll
+
+  Starting test execution...
+  Passed   Add_TwoPositiveNumbers_ReturnsCorrectSum [3ms]
+  Passed   Subtract_LargerFromSmaller_ReturnsNegative [< 1ms]
+  Passed   Divide_ByZero_ThrowsDivideByZeroException [1ms]
+  Passed   IsEven_GivenNumber_ReturnsExpectedResult(number: 2, expected: True) [< 1ms]
+  Passed   IsEven_GivenNumber_ReturnsExpectedResult(number: 3, expected: False) [< 1ms]
+
+  Test Run Successful.
+  Total tests: 5
+       Passed: 5
+  Total time: 1.234 Seconds
+```
+
+### 4.3 Фільтрація тестів за категорією
+
+Ви можете запускати різні категорії тестів в окремих завданнях за допомогою traits:
+
+```csharp
+// In your test code, use Traits to categorize tests
+[Fact]
+[Trait("Category", "Unit")]
+public void Add_TwoNumbers_ReturnsSum() { ... }
+
+[Fact]
+[Trait("Category", "Integration")]
+public async Task GetOrder_ExistingId_ReturnsOrderAsync() { ... }
+```
+
+```yaml
+# In your workflow
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - run: dotnet test --filter "Category=Unit" --verbosity normal
+
+  integration-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - run: dotnet test --filter "Category=Integration" --verbosity normal
+```
+
+---
+
+## 5. Покриття коду в CI
+
+### 5.1 Навіщо вимірювати покриття в CI?
+
+Покриття коду, виміряне локально, корисне, але вимірювання в CI забезпечує:
+
+- **Consistent baseline** — everyone's coverage is measured the same way
+- **Trend tracking** — see coverage change over time
+- **Quality gates** — block merges if coverage drops below a threshold
+- **Visibility** — coverage reports available to the whole team
+
+### 5.2 Coverlet + ReportGenerator у GitHub Actions
+
+#### Step 1: Add Coverlet to Your Test Project
+
+```bash
+dotnet add <TestProject> package coverlet.collector
+```
+
+#### Step 2: Workflow with Coverage Collection
+
+```yaml
+# .github/workflows/ci-with-coverage.yml
+
+name: CI with Coverage
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  DOTNET_VERSION: '9.0.x'
+
+jobs:
+  build-test-coverage:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v5
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --no-restore --configuration Release
+
+      - name: Run tests with coverage
+        run: >
+          dotnet test
+          --no-build
+          --configuration Release
+          --verbosity normal
+          --collect:"XPlat Code Coverage"
+          --results-directory ./coverage
+
+      - name: Install ReportGenerator
+        run: dotnet tool install --global dotnet-reportgenerator-globaltool
+
+      - name: Generate coverage report
+        run: >
+          reportgenerator
+          -reports:./coverage/**/coverage.cobertura.xml
+          -targetdir:./coverage/report
+          -reporttypes:"Html;TextSummary;Cobertura"
+
+      - name: Display coverage summary
+        run: cat ./coverage/report/Summary.txt
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: ./coverage/report/
+          retention-days: 14
+```
+
+### 5.3 Вивід підсумку покриття
+
+The `Summary.txt` output looks like this in the CI logs:
+
+```
+Summary
+  Generated on: 3/9/2026
+  Parser:       Cobertura
+  Assemblies:   2
+  Classes:      8
+  Files:        8
+  Line coverage:    87.3%
+  Branch coverage:  72.1%
+  Method coverage:  91.4%
+
+  +-----------------------+--------+--------+--------+
+  | Assembly              | Line   | Branch | Method |
+  +-----------------------+--------+--------+--------+
+  | Calculator            | 92.5%  | 80.0%  | 95.0%  |
+  | EStore                | 82.1%  | 64.2%  | 87.8%  |
+  +-----------------------+--------+--------+--------+
+```
+
+### 5.4 Публікація покриття як коментаря до PR
+
+Ви можете додавати результати покриття безпосередньо в коментарі до pull request для зручного перегляду:
+
+```yaml
+      - name: Add coverage PR comment
+        uses: marocchino/sticky-pull-request-comment@v2
+        if: github.event_name == 'pull_request'
+        with:
+          recreate: true
+          path: ./coverage/report/Summary.txt
+```
+
+Інший підхід використовує спеціалізований action для покриття:
+
+```yaml
+      - name: Code coverage report
+        uses: irongut/CodeCoverageSummary@v1.3.0
+        if: github.event_name == 'pull_request'
+        with:
+          filename: ./coverage/**/coverage.cobertura.xml
+          badge: true
+          format: markdown
+          output: both
+          thresholds: '60 80'      # Yellow at 60%, green at 80%
+
+      - name: Add coverage to PR
+        uses: marocchino/sticky-pull-request-comment@v2
+        if: github.event_name == 'pull_request'
+        with:
+          recreate: true
+          path: code-coverage-results.md
+```
+
+### 5.5 Примусове мінімальне покриття
+
+Ви можете провалити збірку, якщо покриття падає нижче порогу:
+
+```yaml
+      - name: Check coverage threshold
+        run: |
+          COVERAGE=$(grep -oP 'Line coverage:\s+\K[\d.]+' ./coverage/report/Summary.txt)
+          echo "Line coverage: ${COVERAGE}%"
+          THRESHOLD=80
+          if (( $(echo "$COVERAGE < $THRESHOLD" | bc -l) )); then
+            echo "::error::Coverage ${COVERAGE}% is below the threshold of ${THRESHOLD}%"
+            exit 1
+          fi
+          echo "Coverage ${COVERAGE}% meets the threshold of ${THRESHOLD}%"
+```
+
+> **Discussion (5 min):** What is a reasonable coverage threshold for a project? Should it be the same for all modules? What are the risks of setting it too high or too low?
+
+---
+
+## 6. Branch Protection Rules and Required Checks
+
+### 6.1 What Are Branch Protection Rules?
+
+Branch protection rules prevent direct pushes to important branches (like `main`) and require certain conditions before code can be merged.
+
+```
+Without protection:                 With protection:
+
+Anyone can push                     Push blocked unless:
+directly to main                    ✓ CI pipeline passes
+                                    ✓ Code review approved
+           │                        ✓ Coverage threshold met
+           ▼                        ✓ No merge conflicts
+    Risky, unreviewed
+    code in production                     │
+                                           ▼
+                                    Safe, reviewed, tested
+                                    code in production
+```
+
+### 6.2 Configuring Branch Protection in GitHub
+
+Navigate to: **Repository Settings > Branches > Add branch protection rule**
+
+Key settings:
+
+| Setting | Purpose | Recommendation |
+|---|---|---|
+| **Require a pull request before merging** | No direct pushes to protected branch | Always enable for `main` |
+| **Require approvals** | Code review by at least N reviewers | 1-2 approvals minimum |
+| **Dismiss stale approvals** | Re-review required after new commits | Enable |
+| **Require status checks to pass** | CI must pass before merge | Enable; select your CI job |
+| **Require branches to be up to date** | Branch must be current with base | Enable for critical branches |
+| **Require conversation resolution** | All PR comments must be resolved | Recommended |
+| **Include administrators** | Rules apply to admins too | Recommended for production |
+
+### 6.3 Required Status Checks
+
+When you enable "Require status checks to pass," you select which GitHub Actions jobs must succeed:
+
+```yaml
+# The job name becomes the status check name
+jobs:
+  build-and-test:          # ← This name appears in branch protection settings
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - run: dotnet test
+```
+
+```
+Pull Request:
+
+  ✓ build-and-test         Passed
+  ✓ coverage-check         Passed — 85% coverage
+  ✗ integration-tests      Failed — 2 tests failed    ← Blocks merge
+  ○ deploy-staging         Skipped (waiting on tests)
+
+  [Merge pull request]  ← Button is disabled until all checks pass
+```
+
+### 6.4 Rulesets (Modern Approach)
+
+GitHub now offers **Rulesets** as a more flexible alternative to branch protection rules. Rulesets support:
+
+- Targeting multiple branches with patterns (e.g., `release/*`)
+- Organization-level rules that apply across repositories
+- Tag protection
+- Bypass lists for specific users or teams
+
+```
+Repository Settings > Rules > Rulesets > New ruleset
+
+Target: branches matching "main", "release/*"
+Rules:
+  ✓ Require pull request
+  ✓ Require status checks: "build-and-test"
+  ✓ Block force pushes
+  ✓ Require linear history
+```
+
+---
+
+## 7. Test Management Concepts
+
+### 7.1 Test Plans and Test Strategies
+
+A **test strategy** defines the overall approach to testing for a project. A **test plan** is a concrete document that describes what, how, when, and who.
+
+#### Test Strategy Components
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  Test Strategy                                          │
+│                                                         │
+│  ┌─────────────┐  ┌──────────────┐  ┌───────────────┐  │
+│  │   Scope &   │  │  Test Levels │  │    Tools &    │  │
+│  │  Objectives │  │  & Types     │  │ Infrastructure│  │
+│  └─────────────┘  └──────────────┘  └───────────────┘  │
+│                                                         │
+│  ┌─────────────┐  ┌──────────────┐  ┌───────────────┐  │
+│  │  Entry/Exit │  │   Risk       │  │  Roles &      │  │
+│  │  Criteria   │  │   Analysis   │  │  Responsibilities│
+│  └─────────────┘  └──────────────┘  └───────────────┘  │
+└─────────────────────────────────────────────────────────┘
+```
+
+#### Test Plan Structure (IEEE 829 Based)
+
+| Section | Content |
+|---|---|
+| **Test plan identifier** | Unique ID and version |
+| **Introduction** | Purpose and scope of testing |
+| **Test items** | What software/features are being tested |
+| **Features to be tested** | Specific features in scope |
+| **Features not to be tested** | Excluded features (with justification) |
+| **Approach** | Testing techniques and methods |
+| **Pass/fail criteria** | What constitutes a pass or fail |
+| **Test environment** | Hardware, software, network requirements |
+| **Schedule** | Timeline and milestones |
+| **Risks and contingencies** | Known risks and mitigation plans |
+
+### 7.2 Test Case Management
+
+A **test case** is a set of conditions and expected results used to verify a specific aspect of the system.
+
+#### Test Case Template
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│ Test Case ID:     TC-LOGIN-001                                 │
+│ Title:            Valid user can log in with correct credentials│
+│ Priority:         High                                         │
+│ Preconditions:    User account exists; user is not locked out  │
+│                                                                │
+│ Steps:                                                         │
+│   1. Navigate to /login                                        │
+│   2. Enter valid email: user@example.com                       │
+│   3. Enter valid password: CorrectPassword123!                 │
+│   4. Click "Sign In" button                                   │
+│                                                                │
+│ Expected Result:  User is redirected to /dashboard             │
+│                   Welcome message displays user's name         │
+│                                                                │
+│ Actual Result:    (filled during execution)                    │
+│ Status:           Pass / Fail / Blocked / Skipped              │
+│ Tested By:        (tester name)                                │
+│ Date:             (execution date)                             │
+└────────────────────────────────────────────────────────────────┘
+```
+
+#### Automated vs. Manual Test Cases
+
+| Characteristic | Automate | Keep Manual |
+|---|---|---|
+| Regression tests | Yes | No |
+| Smoke tests | Yes | No |
+| Data-driven tests | Yes | No |
+| Exploratory testing | No | Yes |
+| Usability testing | No | Yes |
+| Tests run once | No | Yes |
+| Complex UI workflows | Sometimes | Sometimes |
+
+### 7.3 Defect Lifecycle
+
+A defect (bug) follows a lifecycle from discovery to resolution:
+
+```
+┌──────┐    ┌────────┐    ┌──────────┐    ┌────────┐    ┌────────┐
+│ New  │───►│  Open  │───►│ Assigned │───►│ Fixed  │───►│ Closed │
+└──────┘    └────┬───┘    └────┬─────┘    └───┬────┘    └────────┘
+                 │             │              │              ▲
+                 │             │              ▼              │
+                 │             │         ┌─────────┐        │
+                 │             │         │Verified │────────┘
+                 │             │         └────┬────┘
+                 │             │              │
+                 │             ▼              ▼
+                 │      ┌───────────┐   ┌──────────┐
+                 │      │ Deferred  │   │ Reopened │
+                 │      └───────────┘   └──────────┘
+                 │
+                 ▼
+           ┌───────────┐
+           │ Rejected  │  (not a bug / duplicate / by design)
+           └───────────┘
+```
+
+#### Defect Report Fields
+
+| Field | Description | Example |
+|---|---|---|
+| **ID** | Unique identifier | BUG-1234 |
+| **Title** | Short, descriptive summary | "Login fails for emails with '+' character" |
+| **Severity** | Technical impact | Critical / Major / Minor / Trivial |
+| **Priority** | Business urgency | P1 (urgent) / P2 (high) / P3 (normal) / P4 (low) |
+| **Steps to reproduce** | Exact steps to trigger the bug | 1. Go to /login 2. Enter user+tag@mail.com... |
+| **Expected result** | What should happen | User is logged in successfully |
+| **Actual result** | What actually happens | Error: "Invalid email format" |
+| **Environment** | Where it was found | Chrome 120, Ubuntu 22.04, .NET 10 |
+| **Attachments** | Screenshots, logs, videos | screenshot.png, error.log |
+
+> **Discussion (5 min):** What is the difference between severity and priority? Can a trivial bug have high priority? Can a critical bug have low priority? Give examples.
+
+### 7.4 Test Reporting and Metrics
+
+#### Key Testing Metrics
+
+| Metric | Formula | What It Tells You |
+|---|---|---|
+| **Test pass rate** | Passed / Total tests | Overall quality signal |
+| **Defect density** | Defects / KLOC (thousands of lines of code) | Code quality by module |
+| **Defect detection rate** | Defects found in testing / Total defects | Testing effectiveness |
+| **Test coverage** | Lines covered / Total lines | How much code is exercised |
+| **Mean time to detect (MTTD)** | Average time from introduction to discovery | Speed of feedback |
+| **Mean time to resolve (MTTR)** | Average time from detection to fix | Team responsiveness |
+| **Escaped defects** | Defects found in production | Testing gaps |
+| **Flaky test rate** | Flaky tests / Total tests | CI reliability |
+
+#### Test Dashboard Example
+
+```
+┌──────────────────────────────────────────────────────────┐
+│  Test Dashboard — Sprint 14                              │
+│                                                          │
+│  Test Execution          Coverage           Defects      │
+│  ┌──────────────┐        ┌────────────┐     ┌─────────┐ │
+│  │ Total:  342  │        │ Line: 87%  │     │ Open: 12│ │
+│  │ Pass:   331  │        │ Branch:72% │     │ Fixed: 8│ │
+│  │ Fail:     8  │        │ Method:91% │     │ New:   5│ │
+│  │ Skip:     3  │        └────────────┘     └─────────┘ │
+│  │ Rate: 96.8%  │                                        │
+│  └──────────────┘        Build Health                    │
+│                          ┌────────────────────────────┐  │
+│  Flaky Tests: 4 (1.2%)   │ Last 30 builds: 27 green  │  │
+│                          │                 3 red      │  │
+│                          │ Success rate: 90%          │  │
+│                          └────────────────────────────┘  │
+└──────────────────────────────────────────────────────────┘
+```
+
+### 7.5 Risk-Based Testing
+
+Not all features carry the same risk. Risk-based testing prioritizes testing effort based on the **likelihood** and **impact** of failure.
+
+#### Risk Matrix
+
+```
+                    Impact
+                Low      Medium     High
+           ┌─────────┬──────────┬──────────┐
+  High     │ Medium  │   High   │ Critical │
+           │         │          │          │
+Likelihood ├─────────┼──────────┼──────────┤
+  Medium   │  Low    │  Medium  │   High   │
+           │         │          │          │
+           ├─────────┼──────────┼──────────┤
+  Low      │  Low    │   Low    │  Medium  │
+           │         │          │          │
+           └─────────┴──────────┴──────────┘
+```
+
+| Risk Level | Testing Approach |
+|---|---|
+| **Critical** | Extensive automated tests, manual exploratory testing, performance testing |
+| **High** | Comprehensive automated tests, targeted manual testing |
+| **Medium** | Standard automated test coverage |
+| **Low** | Basic smoke tests, rely on automated regression |
+
+#### Example: E-Commerce Application
+
+| Feature | Likelihood of Failure | Impact of Failure | Risk | Testing Effort |
+|---|---|---|---|---|
+| Payment processing | Medium | Critical | **Critical** | Full coverage + E2E + load tests |
+| User registration | Low | High | **Medium** | Unit + integration tests |
+| Product search | Medium | Medium | **Medium** | Unit + basic E2E |
+| Admin dashboard | Low | Low | **Low** | Basic smoke tests |
+
+> **Discussion (10 min):** For a healthcare appointment booking system, how would you classify the risk of these features: booking an appointment, canceling an appointment, viewing medical records, changing the UI theme? How would this affect your testing strategy?
+
+---
+
+## 8. Quality Gates
+
+### 8.1 What is a Quality Gate?
+
+A **quality gate** is a set of conditions that must be met before code can progress to the next stage (e.g., from development to staging, or from staging to production).
+
+```
+Code change
+     │
+     ▼
+┌──────────────────┐     ┌──────────────────┐     ┌──────────────┐
+│  Gate 1: Merge   │     │  Gate 2: Deploy  │     │  Gate 3:     │
+│  to main         │     │  to staging      │     │  Production  │
+│                  │     │                  │     │              │
+│  ✓ Tests pass    │     │  ✓ Gate 1 passed │     │  ✓ Gate 2    │
+│  ✓ Coverage ≥80% │────►│  ✓ E2E tests     │────►│  ✓ Smoke     │
+│  ✓ No critical   │     │  ✓ Performance   │     │    tests     │
+│    issues        │     │    benchmarks    │     │  ✓ Manual    │
+│  ✓ Code review   │     │  ✓ Security scan │     │    approval  │
+│    approved      │     │                  │     │              │
+└──────────────────┘     └──────────────────┘     └──────────────┘
+```
+
+### 8.2 Common Quality Gate Criteria
+
+| Gate | Criteria | Implementation |
+|---|---|---|
+| **PR merge** | All tests pass | GitHub Actions required status checks |
+| **PR merge** | Code coverage above threshold | Coverlet + coverage check step |
+| **PR merge** | No new critical/high issues | Static analysis (Roslyn, SonarCloud) |
+| **PR merge** | Code review approved | Branch protection: require approvals |
+| **Staging deploy** | All integration tests pass | E2E test job in pipeline |
+| **Staging deploy** | Performance within acceptable range | Benchmark comparison step |
+| **Production deploy** | Manual approval by designated reviewer | GitHub Environments with reviewers |
+| **Production deploy** | Smoke tests pass on staging | Automated smoke test job |
+
+### 8.3 Implementing Quality Gates in GitHub Actions
+
+#### Using GitHub Environments for Deployment Approval
+
+```yaml
 jobs:
   test:
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - run: dotnet test
+
+  deploy-staging:
+    needs: test
+    runs-on: ubuntu-latest
+    environment: staging               # Links to GitHub environment
+    steps:
+      - run: echo "Deploying to staging..."
+
+  deploy-production:
+    needs: deploy-staging
+    runs-on: ubuntu-latest
+    environment: production            # Requires manual approval
+    steps:
+      - run: echo "Deploying to production..."
+```
+
+Configure approval in: **Repository Settings > Environments > production > Required reviewers**
+
+---
+
+## 9. Flaky Test Detection and Management
+
+### 9.1 What Are Flaky Tests?
+
+A **flaky test** is a test that sometimes passes and sometimes fails without any change to the code. Flaky tests are one of the biggest problems in CI/CD.
+
+```
+Same code, same test, different results:
+
+Run 1:  ✓ Pass
+Run 2:  ✗ Fail    ← No code changed!
+Run 3:  ✓ Pass
+Run 4:  ✓ Pass
+Run 5:  ✗ Fail    ← Flaky!
+```
+
+### 9.2 Common Causes of Flaky Tests
+
+| Cause | Example | Fix |
+|---|---|---|
+| **Timing/race conditions** | `await Task.Delay(100)` in test | Use proper synchronization, not delays |
+| **Shared state** | Tests share a database record | Isolate test data; reset state per test |
+| **Test order dependency** | Test B relies on Test A running first | Make each test independent |
+| **Time-dependent logic** | Test checks `DateTime.Now` | Inject a clock abstraction; mock time |
+| **External dependencies** | Test calls a real API | Mock external services |
+| **Resource exhaustion** | Port already in use | Use dynamic ports; clean up resources |
+| **Floating-point precision** | `0.1 + 0.2 == 0.3` | Use tolerance: `result.ShouldBe(0.3, 0.001)` |
+| **Random data** | Test uses `Random` without seed | Use deterministic test data |
+
+### 9.3 Detecting Flaky Tests
+
+#### Strategy 1: Retry on Failure
+
+Configure test retries to identify flaky tests. In xUnit v3, you can use the `[Retry]` attribute (available via extensions) or configure retries at the CI level:
+
+```yaml
+# Retry the entire test step
+- name: Run tests
+  run: dotnet test --verbosity normal
+  continue-on-error: false
+
+# Or use a retry action
+- name: Run tests with retry
+  uses: nick-fields/retry@v3
+  with:
+    max_attempts: 3
+    timeout_minutes: 10
+    command: dotnet test --verbosity normal
+```
+
+#### Strategy 2: Track Test Results Over Time
+
+```yaml
+- name: Run tests with TRX output
+  run: >
+    dotnet test
+    --logger "trx;LogFileName=results.trx"
+    --results-directory ./test-results
+
+# Upload results for trend analysis
+- name: Upload test results
+  uses: actions/upload-artifact@v4
+  if: always()
+  with:
+    name: test-results-${{ github.run_number }}
+    path: ./test-results/
+```
+
+### 9.4 Managing Flaky Tests
+
+A flaky test management process:
+
+```
+Test fails intermittently
+         │
+         ▼
+┌──────────────────────┐
+│ 1. Identify as flaky │──► Log in issue tracker with "flaky" label
+└──────────┬───────────┘
+           │
+           ▼
+┌──────────────────────┐
+│ 2. Quarantine        │──► Move to a separate test suite (optional)
+└──────────┬───────────┘     Don't block the pipeline
+           │
+           ▼
+┌──────────────────────┐
+│ 3. Investigate root  │──► Find the cause (timing, state, resources)
+│    cause             │
+└──────────┬───────────┘
+           │
+           ▼
+┌──────────────────────┐
+│ 4. Fix or remove     │──► Fix the root cause; if not possible,
+└──────────────────────┘     convert to manual test or remove
+```
+
+**Important rule:** Never ignore flaky tests. They erode trust in the CI pipeline. If developers learn to dismiss failures as "probably just a flaky test," real bugs will be missed.
+
+> **Discussion (5 min):** Your CI pipeline has 500 tests and 3% are flaky. Every other build fails due to flaky tests. How would you handle this? Is it ever acceptable to just re-run the pipeline?
+
+---
+
+## 10. Environment Management
+
+### 10.1 Common Environments
+
+Software typically progresses through multiple environments before reaching users:
+
+```
+┌────────────┐    ┌────────────┐    ┌────────────┐    ┌──────────────┐
+│   Local    │───►│    Dev     │───►│  Staging   │───►│  Production  │
+│            │    │            │    │            │    │              │
+│ Developer's│    │ Shared dev │    │ Production │    │ Live users   │
+│ machine    │    │ environment│    │ mirror     │    │              │
+│            │    │            │    │            │    │              │
+│ Unit tests │    │ Integration│    │ E2E tests  │    │ Monitoring   │
+│            │    │ tests      │    │ Perf tests │    │ Smoke tests  │
+└────────────┘    └────────────┘    └────────────┘    └──────────────┘
+```
+
+| Environment | Purpose | Data | Testing |
+|---|---|---|---|
+| **Local** | Developer experimentation | Mock/in-memory | Unit tests, quick integration |
+| **Dev** | Integration of all components | Synthetic test data | Integration, API tests |
+| **Staging** | Pre-production validation | Production-like data (anonymized) | E2E, performance, security |
+| **Production** | Live user traffic | Real data | Smoke tests, monitoring |
+
+### 10.2 Environment Variables in GitHub Actions
+
+```yaml
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: staging
+    env:
+      DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+      API_KEY: ${{ secrets.STAGING_API_KEY }}
+    steps:
+      - name: Deploy
+        run: echo "Deploying to staging"
+        env:
+          DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN }}  # Step-level env var
+```
+
+### 10.3 GitHub Environments
+
+GitHub Environments provide:
+- **Secrets scoped to an environment** (different secrets for staging vs. production)
+- **Protection rules** (required reviewers, wait timers)
+- **Deployment history** (track what was deployed when)
+
+```yaml
+jobs:
+  deploy-staging:
+    runs-on: ubuntu-latest
+    environment:
+      name: staging
+      url: https://staging.myapp.com    # Shows in the GitHub UI
+
+  deploy-production:
+    needs: deploy-staging
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://myapp.com
+```
+
+---
+
+## 11. Docker in CI for Integration Tests
+
+### 11.1 Why Docker in CI?
+
+Integration tests often need real infrastructure — databases, message queues, caches. Docker provides lightweight, disposable instances of these services.
+
+```
+Without Docker:                      With Docker:
+
+Install SQL Server on runner ✗       Start container in seconds ✓
+Manage state between runs ✗          Fresh instance per run ✓
+Different versions conflict ✗        Any version, isolated ✓
+Works differently on CI vs local ✗   Same container everywhere ✓
+```
+
+### 11.2 Docker Services in GitHub Actions
+
+GitHub Actions can run Docker containers as services alongside your tests:
+
+```yaml
+jobs:
+  integration-tests:
+    runs-on: ubuntu-latest
+
+    services:
+      sqlserver:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: Y
+          MSSQL_SA_PASSWORD: YourStr0ng!Password
+        ports:
+          - 1433:1433
+        options: >-
+          --health-cmd "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'YourStr0ng!Password' -C -Q 'SELECT 1'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: testuser
+          POSTGRES_PASSWORD: testpassword
+          POSTGRES_DB: testdb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - uses: actions/checkout@v6
 
@@ -1248,476 +1384,528 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
-      - name: Restore
+      - name: Run integration tests
+        run: dotnet test --filter "Category=Integration" --verbosity normal
+        env:
+          ConnectionStrings__SqlServer: "Server=localhost,1433;Database=testdb;User Id=sa;Password=YourStr0ng!Password;TrustServerCertificate=true"
+          ConnectionStrings__Postgres: "Host=localhost;Port=5432;Database=testdb;Username=testuser;Password=testpassword"
+```
+
+### 11.3 Testcontainers in GitHub Actions
+
+Testcontainers starts Docker containers from within your test code. This works in GitHub Actions because the `ubuntu-latest` runner has Docker pre-installed.
+
+```csharp
+// Example test using Testcontainers for SQL Server
+using Testcontainers.MsSql;
+
+public class DatabaseIntegrationTests : IAsyncLifetime
+{
+    private readonly MsSqlContainer _sqlContainer = new MsSqlBuilder()
+        .WithImage("mcr.microsoft.com/mssql/server:2022-latest")
+        .Build();
+
+    public async Task InitializeAsync()
+    {
+        await _sqlContainer.StartAsync();
+    }
+
+    public async Task DisposeAsync()
+    {
+        await _sqlContainer.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task CanConnectToDatabase()
+    {
+        var connectionString = _sqlContainer.GetConnectionString();
+        // Use connectionString to run your integration test...
+    }
+}
+```
+
+The corresponding workflow is simpler because Testcontainers manages Docker itself:
+
+```yaml
+jobs:
+  integration-tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      # Docker is already available on ubuntu-latest
+      # Testcontainers will manage containers automatically
+
+      - name: Run integration tests
+        run: dotnet test --filter "Category=Integration" --verbosity normal
+```
+
+> **Discussion (5 min):** What are the trade-offs between using GitHub Actions services vs. Testcontainers? When would you prefer one approach over the other?
+
+---
+
+## 12. Complete CI/CD Pipeline Example
+
+Here is a comprehensive, production-ready GitHub Actions workflow that combines all the concepts from this lecture:
+
+```yaml
+# .github/workflows/ci-cd.yml
+
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  DOTNET_VERSION: '9.0.x'
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  # ─────────────────────────────────────────────
+  # Stage 1: Build
+  # ─────────────────────────────────────────────
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v5
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      - name: Restore dependencies
         run: dotnet restore
 
       - name: Build
-        run: dotnet build --no-restore
+        run: dotnet build --no-restore --configuration Release
 
-      - name: Test with Coverage
-        run: |
-          dotnet test --no-build \
-            --collect:"XPlat Code Coverage" \
-            --results-directory ./coverage
+  # ─────────────────────────────────────────────
+  # Stage 2: Unit Tests + Coverage
+  # ─────────────────────────────────────────────
+  unit-tests:
+    needs: build
+    runs-on: ubuntu-latest
 
-      - name: Generate Report
-        run: |
-          dotnet tool install --global dotnet-reportgenerator-globaltool
-          reportgenerator \
-            -reports:./coverage/**/coverage.cobertura.xml \
-            -targetdir:./coverage/report \
-            -reporttypes:"Html;TextSummary;Cobertura"
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
 
-      - name: Print Summary
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v5
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      - name: Run unit tests with coverage
+        run: >
+          dotnet test
+          --filter "Category=Unit"
+          --configuration Release
+          --verbosity normal
+          --collect:"XPlat Code Coverage"
+          --results-directory ./coverage
+          --logger "trx;LogFileName=unit-test-results.trx"
+
+      - name: Install ReportGenerator
+        run: dotnet tool install --global dotnet-reportgenerator-globaltool
+
+      - name: Generate coverage report
+        run: >
+          reportgenerator
+          -reports:./coverage/**/coverage.cobertura.xml
+          -targetdir:./coverage/report
+          -reporttypes:"Html;TextSummary;Cobertura"
+
+      - name: Display coverage summary
         run: cat ./coverage/report/Summary.txt
 
-      - name: Upload Coverage Report
+      - name: Upload coverage report
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report
           path: ./coverage/report/
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: unit-test-results
+          path: ./coverage/**/*.trx
+
+  # ─────────────────────────────────────────────
+  # Stage 3: Integration Tests
+  # ─────────────────────────────────────────────
+  integration-tests:
+    needs: build
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: testuser
+          POSTGRES_PASSWORD: testpassword
+          POSTGRES_DB: testdb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v5
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      - name: Run integration tests
+        run: >
+          dotnet test
+          --filter "Category=Integration"
+          --configuration Release
+          --verbosity normal
+          --logger "trx;LogFileName=integration-test-results.trx"
+          --results-directory ./test-results
+        env:
+          ConnectionStrings__Postgres: "Host=localhost;Port=5432;Database=testdb;Username=testuser;Password=testpassword"
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: integration-test-results
+          path: ./test-results/**/*.trx
+
+  # ─────────────────────────────────────────────
+  # Stage 4: Deploy to Staging
+  # ─────────────────────────────────────────────
+  deploy-staging:
+    needs: [unit-tests, integration-tests]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment:
+      name: staging
+      url: https://staging.myapp.com
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Publish application
+        run: dotnet publish --configuration Release --output ./publish
+
+      - name: Deploy to staging
+        run: echo "Deploy to staging environment"
+        # In a real project, this would deploy to Azure, AWS, etc.
+
+  # ─────────────────────────────────────────────
+  # Stage 5: Deploy to Production (manual approval)
+  # ─────────────────────────────────────────────
+  deploy-production:
+    needs: deploy-staging
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://myapp.com
+
+    steps:
+      - name: Deploy to production
+        run: echo "Deploy to production environment"
 ```
 
-> **Discussion (5 min):** Your team achieves 95% line coverage but keeps finding bugs in production. What might be wrong? How would you improve the testing strategy beyond just increasing the coverage number?
+Pipeline visualization:
+
+```
+                    ┌──────────────┐
+                    │    build     │
+                    └──────┬───────┘
+                           │
+              ┌────────────┴────────────┐
+              ▼                         ▼
+     ┌──────────────┐        ┌────────────────────┐
+     │  unit-tests  │        │ integration-tests  │
+     │  + coverage  │        │  (with Postgres)   │
+     └──────┬───────┘        └────────┬───────────┘
+            │                         │
+            └────────────┬────────────┘
+                         ▼
+               ┌──────────────────┐
+               │  deploy-staging  │  (only on push to main)
+               └────────┬─────────┘
+                        ▼
+              ┌────────────────────┐
+              │ deploy-production  │  (manual approval)
+              └────────────────────┘
+```
 
 ---
 
-## 5. Relationship Between Test Design Techniques and Coverage
+## 13. Advanced Topics
 
-### 5.1 How They Work Together
+### 13.1 Reusable Workflows
 
-Black-box and white-box techniques are **complementary**, not competing:
+As your organization grows, you may want to share workflow logic across repositories:
 
-```
-Specification                              Code
-     │                                      │
-     ▼                                      ▼
-Black-Box Techniques                  White-Box Techniques
-     │                                      │
-     ▼                                      ▼
-Test cases derived from               Test cases derived from
-WHAT the system should do             HOW the code is structured
-     │                                      │
-     └──────────── Combined ───────────────┘
-                      │
-                      ▼
-              Comprehensive test suite
-              with measurable coverage
-```
+```yaml
+# .github/workflows/reusable-dotnet-test.yml (in a shared repository)
 
-#### A Practical Workflow
+name: Reusable .NET Test
 
-1. **Start with black-box techniques** — design tests from the specification using EP, BVA, decision tables, etc.
-2. **Measure coverage** — run the black-box tests and check code coverage
-3. **Identify gaps** — look for untested code (red/yellow lines in the report)
-4. **Add white-box tests** — write targeted tests to cover the gaps
-5. **Review** — ensure the new tests actually verify behavior (not just execute code)
+on:
+  workflow_call:
+    inputs:
+      dotnet-version:
+        required: false
+        type: string
+        default: '9.0.x'
+      test-filter:
+        required: false
+        type: string
+        default: ''
 
-### 5.2 Example: The Gap Between Specification and Code
-
-Consider a function specified as: "Return the larger of two numbers."
-
-```csharp
-public int Max(int a, int b)
-{
-    if (a >= b)
-        return a;
-    else
-        return b;
-}
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ inputs.dotnet-version }}
+      - run: dotnet restore
+      - run: dotnet build --no-restore --configuration Release
+      - run: dotnet test --no-build --configuration Release --filter "${{ inputs.test-filter }}"
 ```
 
-**Black-box tests** (from EP/BVA):
+```yaml
+# .github/workflows/ci.yml (in a consuming repository)
 
-```csharp
-[Theory]
-[InlineData(5, 3, 5)]    // a > b
-[InlineData(3, 5, 5)]    // a < b
-[InlineData(4, 4, 4)]    // a == b
-public void Max_TwoNumbers_ReturnsLarger(int a, int b, int expected)
-{
-    _sut.Max(a, b).ShouldBe(expected);
-}
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  unit-tests:
+    uses: my-org/shared-workflows/.github/workflows/reusable-dotnet-test.yml@main
+    with:
+      test-filter: "Category=Unit"
+
+  integration-tests:
+    uses: my-org/shared-workflows/.github/workflows/reusable-dotnet-test.yml@main
+    with:
+      test-filter: "Category=Integration"
 ```
 
-These three tests achieve 100% branch coverage of the `Max` method. But suppose the developer accidentally implemented:
+### 13.2 Secrets Management
 
-```csharp
-public int Max(int a, int b)
-{
-    if (a >= b)
-        return a;
-    else
-        return a;  // BUG: should return b
-}
+Never hard-code secrets in workflow files. Use GitHub Secrets:
+
+```yaml
+# Set secrets in: Repository Settings > Secrets and variables > Actions
+
+steps:
+  - name: Connect to database
+    run: dotnet test
+    env:
+      DB_CONNECTION_STRING: ${{ secrets.DB_CONNECTION_STRING }}
+
+  - name: Deploy
+    run: ./deploy.sh
+    env:
+      DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN }}
 ```
 
-The test `Max(3, 5, 5)` would catch this bug — the **assertion** is what catches it, not the coverage number. This reinforces: **coverage tells you what was executed, assertions tell you what was verified.**
+| Secret Scope | Visibility | Use Case |
+|---|---|---|
+| **Repository secrets** | Available to all workflows in the repo | API keys, tokens |
+| **Environment secrets** | Available only in a specific environment | Production DB credentials |
+| **Organization secrets** | Shared across repos in an organization | Shared service tokens |
 
-### 5.3 Mutation Testing — A Brief Mention
+**Important:** Secrets are **not** passed to workflows triggered by pull requests from forks (security measure).
 
-**Mutation testing** evaluates the quality of your test suite by introducing small changes (mutations) to the code and checking whether your tests detect them.
+### 13.3 Workflow Security Best Practices
 
-```
-Original code:       if (a >= b) return a;
-Mutant 1:            if (a >  b) return a;   // Changed >= to >
-Mutant 2:            if (a >= b) return b;   // Changed return value
-Mutant 3:            if (a <= b) return a;   // Changed >= to <=
-```
-
-- If a test fails → the mutant is **killed** (good: your tests detect the change)
-- If all tests pass → the mutant **survived** (bad: your tests missed it)
-
-The **mutation score** = killed mutants / total mutants. A high mutation score indicates that your tests are sensitive to code changes. Tools like **Stryker.NET** can automate this.
-
----
-
-## 6. When to Use Which Technique
-
-### 6.1 Decision Guide
-
-```
-                          What information do you have?
-                                    │
-                    ┌───────────────┴───────────────┐
-                    │                               │
-              Specification                    Source Code
-              (requirements)                   (implementation)
-                    │                               │
-                    ▼                               ▼
-            Black-Box Techniques           White-Box Techniques
-                    │                               │
-        ┌───────────┼───────────┐         ┌─────────┼──────────┐
-        │           │           │         │         │          │
-   Ranges/       Complex     States/     Coverage  Critical   Regulated
-   boundaries    rules       lifecycle   gaps      logic      industry
-        │           │           │         │         │          │
-        ▼           ▼           ▼         ▼         ▼          ▼
-       EP +      Decision    State      Branch   Path       MC/DC
-       BVA       Tables      Trans.     Coverage Coverage   Coverage
-```
-
-### 6.2 Technique Selection Matrix
-
-| Situation | Recommended Technique(s) |
+| Practice | Why |
 |---|---|
-| Numeric input ranges (age, price, quantity) | EP + BVA |
-| Complex business rules with multiple conditions | Decision table |
-| Workflow with defined states (order, account) | State transition |
-| Multiple configuration parameters | Pairwise testing |
-| Ensuring all code is exercised | Statement/branch coverage |
-| Safety-critical code | MC/DC + path coverage |
-| Verifying test quality after writing tests | Coverage measurement + mutation testing |
-| API with many parameter combinations | Pairwise + EP for each parameter |
+| **Pin action versions with SHA** | Prevent supply-chain attacks: `uses: actions/checkout@8ade135...` |
+| **Use `permissions` to limit GITHUB_TOKEN** | Principle of least privilege |
+| **Don't use `pull_request_target` with checkout** | Prevents code injection from forks |
+| **Audit third-party actions** | Review source before trusting |
 
-### 6.3 Combining Techniques — A Realistic Example
+```yaml
+# Limit permissions
+permissions:
+  contents: read       # Only read access to code
+  pull-requests: write # Can comment on PRs
 
-Consider a `ShippingCalculator` that determines shipping cost based on:
-- Weight (numeric range)
-- Destination (domestic/international)
-- Shipping speed (standard/express/overnight)
-- Member status (member/non-member)
-
-**Strategy:**
-
-1. **EP** on weight: underweight (invalid), light (0-1kg), medium (1-10kg), heavy (10-30kg), overweight (>30kg, invalid)
-2. **BVA** on weight boundaries: 0, 0.01, 1, 1.01, 10, 10.01, 30, 30.01
-3. **Decision table** for the combination of destination, speed, and member status (2 x 3 x 2 = 12 rules)
-4. **Pairwise** if the number of parameters grows beyond what decision tables can handle
-5. **Coverage measurement** to identify any code paths missed by the above
-
-```csharp
-public class ShippingCalculator
-{
-    public decimal Calculate(
-        decimal weightKg,
-        bool isDomestic,
-        string speed,
-        bool isMember)
-    {
-        if (weightKg <= 0)
-            throw new ArgumentException("Weight must be positive.");
-        if (weightKg > 30)
-            throw new ArgumentException("Maximum weight is 30 kg.");
-
-        decimal baseCost = weightKg switch
-        {
-            <= 1  => 5.00m,
-            <= 10 => 10.00m,
-            _     => 20.00m,
-        };
-
-        decimal locationMultiplier = isDomestic ? 1.0m : 2.5m;
-
-        decimal speedMultiplier = speed switch
-        {
-            "standard"  => 1.0m,
-            "express"   => 1.5m,
-            "overnight" => 3.0m,
-            _ => throw new ArgumentException($"Unknown speed: {speed}"),
-        };
-
-        decimal total = baseCost * locationMultiplier * speedMultiplier;
-
-        if (isMember)
-            total *= 0.9m; // 10% member discount
-
-        return total;
-    }
-}
-```
-
-```csharp
-public class ShippingCalculatorTests
-{
-    private readonly ShippingCalculator _sut = new();
-
-    // --- EP: Weight categories ---
-
-    [Theory]
-    [InlineData(0.5, true,  "standard", false, 5.00)]     // light
-    [InlineData(5.0, true,  "standard", false, 10.00)]    // medium
-    [InlineData(20,  true,  "standard", false, 20.00)]    // heavy
-    public void Calculate_WeightCategories_ReturnsExpectedBase(
-        decimal weight, bool domestic, string speed, bool member,
-        decimal expected)
-    {
-        _sut.Calculate(weight, domestic, speed, member).ShouldBe(expected);
-    }
-
-    // --- BVA: Weight boundaries ---
-
-    [Theory]
-    [InlineData(1.00,  5.00)]     // upper boundary of light
-    [InlineData(1.01, 10.00)]     // lower boundary of medium
-    [InlineData(10.00, 10.00)]    // upper boundary of medium
-    [InlineData(10.01, 20.00)]    // lower boundary of heavy
-    public void Calculate_WeightBoundaries_ReturnsExpectedBase(
-        decimal weight, decimal expectedBase)
-    {
-        _sut.Calculate(weight, true, "standard", false).ShouldBe(expectedBase);
-    }
-
-    // --- BVA: Invalid weight ---
-
-    [Theory]
-    [InlineData(0)]
-    [InlineData(-1)]
-    [InlineData(30.01)]
-    public void Calculate_InvalidWeight_ThrowsException(decimal weight)
-    {
-        Should.Throw<ArgumentException>(
-            () => _sut.Calculate(weight, true, "standard", false));
-    }
-
-    // --- Decision table: destination x speed x member ---
-
-    [Theory]
-    [InlineData(true,  "standard", false, 10.00)]
-    [InlineData(true,  "express",  false, 15.00)]
-    [InlineData(true,  "overnight",false, 30.00)]
-    [InlineData(true,  "standard", true,  9.00)]
-    [InlineData(false, "standard", false, 25.00)]
-    [InlineData(false, "express",  true,  33.75)]
-    public void Calculate_DestinationSpeedMember_ReturnsExpected(
-        bool domestic, string speed, bool member, decimal expected)
-    {
-        // Using 5kg (medium) as base = 10.00
-        _sut.Calculate(5.0m, domestic, speed, member).ShouldBe(expected);
-    }
-}
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # Pin to a specific commit SHA for security
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 ```
 
 ---
 
-## 7. Practical Exercise: Applying All Techniques
+## 14. Practical Exercise
 
-### Task: Test a `GradeCalculator`
+### Task: Set Up a CI/CD Pipeline for a .NET Project
 
-Given the following specification and implementation, apply the test design techniques from this lecture to create a comprehensive test suite.
+Create a GitHub Actions workflow for a .NET test project that includes:
 
-**Specification:**
+1. **Build job**: Restore, build, cache NuGet packages
+2. **Test job**: Run xUnit tests, collect coverage with Coverlet
+3. **Report job**: Generate coverage report, upload as artifact
+4. **Quality gate**: Fail the pipeline if coverage drops below 75%
 
-A university grading system converts numeric scores to letter grades:
-- 90-100: A
-- 80-89: B
-- 70-79: C
-- 60-69: D
-- 0-59: F
-- Scores outside 0-100: Invalid (throw exception)
+**Starter workflow structure:**
 
-Additional rules:
-- If the student has perfect attendance (`hasAttendance = true`) and their score is within 2 points of the next grade boundary, they get bumped up
-- If the student is a repeating student (`isRepeating = true`), they need 5 extra points per grade level (e.g., A requires 95 instead of 90)
+```yaml
+# .github/workflows/ci.yml
+name: CI Pipeline
 
-```csharp
-// GradeCalculator.cs
-namespace Grading;
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
 
-public class GradeCalculator
-{
-    public string CalculateGrade(int score, bool hasAttendance, bool isRepeating)
-    {
-        if (score < 0 || score > 100)
-            throw new ArgumentOutOfRangeException(
-                nameof(score), "Score must be between 0 and 100.");
+jobs:
+  build:
+    # TODO: Implement build steps with caching
 
-        // Apply attendance bonus: bump up if within 2 points of next boundary
-        int effectiveScore = score;
-        if (hasAttendance && !isRepeating)
-        {
-            int[] boundaries = [60, 70, 80, 90];
-            foreach (var boundary in boundaries)
-            {
-                if (score >= boundary - 2 && score < boundary)
-                {
-                    effectiveScore = boundary;
-                    break;
-                }
-            }
-        }
+  test:
+    needs: build
+    # TODO: Run tests with coverage collection
 
-        // Adjust thresholds for repeating students
-        int aThreshold = isRepeating ? 95 : 90;
-        int bThreshold = isRepeating ? 85 : 80;
-        int cThreshold = isRepeating ? 75 : 70;
-        int dThreshold = isRepeating ? 65 : 60;
-
-        return effectiveScore switch
-        {
-            >= var t when effectiveScore >= aThreshold => "A",
-            >= var t when effectiveScore >= bThreshold => "B",
-            >= var t when effectiveScore >= cThreshold => "C",
-            >= var t when effectiveScore >= dThreshold => "D",
-            _ => "F",
-        };
-    }
-}
+  quality-gate:
+    needs: test
+    # TODO: Check coverage threshold (75%)
+    # TODO: Upload coverage report as artifact
 ```
 
-**Your task:**
+**Bonus challenges:**
+- Add a matrix build for .NET 9 and .NET 10
+- Add a step that posts the coverage summary as a PR comment
+- Add branch protection rules requiring the CI pipeline to pass
 
-1. **Draw the equivalence partitions** for the score input
-2. **Identify boundary values** for each grade boundary
-3. **Build a decision table** for the interaction of `hasAttendance` and `isRepeating`
-4. **Write xUnit tests** using EP, BVA, and decision table techniques
-5. **Measure coverage** with Coverlet and generate a report
-6. **Identify any gaps** and add tests to address them
-
-**Skeleton test class to get started:**
-
-```csharp
-using Shouldly;
-
-namespace Grading.Tests;
-
-public class GradeCalculatorTests
-{
-    private readonly GradeCalculator _sut = new();
-
-    // --- Equivalence Partitioning ---
-    // TODO: One test per grade partition (A, B, C, D, F, Invalid)
-
-    // --- Boundary Value Analysis ---
-    // TODO: Test at each grade boundary (59/60, 69/70, 79/80, 89/90)
-
-    // --- Decision Table: attendance x repeating ---
-    // TODO: Test all combinations of hasAttendance and isRepeating
-    //       at relevant score values
-
-    // --- Attendance Bonus Edge Cases ---
-    // TODO: Score = 58 (within 2 of 60, should bump to D)
-    // TODO: Score = 57 (NOT within 2 of 60, stays F)
-
-    // --- Repeating Student Thresholds ---
-    // TODO: Score = 93 (A for normal, B for repeating)
-}
-```
-
-> **Discussion (15 min):** After writing your tests, run coverage. What percentage did you achieve? Are there any lines you chose not to test? Why or why not?
+> **Discussion (15 min):** Walk through your workflow design. What would happen if the test step fails? What if coverage is at 74%? How would you debug a failing workflow?
 
 ---
 
-## 8. Common Pitfalls and Best Practices
-
-### 8.1 Coverage Pitfalls
-
-| Pitfall | Example | Remedy |
-|---|---|---|
-| **Chasing the number** | Writing tests just to increase coverage % | Focus on meaningful tests that verify behavior |
-| **Tests without assertions** | Code is executed but nothing is verified | Every test must assert something meaningful |
-| **Excluding too much** | `[ExcludeFromCodeCoverage]` on business logic | Only exclude truly untestable code (e.g., `Main()`) |
-| **Ignoring branch coverage** | 100% line but 50% branch | Track both line and branch coverage |
-| **One-time measurement** | Checking coverage only at release | Integrate into CI, track trends over time |
-
-### 8.2 Test Design Pitfalls
-
-| Pitfall | Example | Remedy |
-|---|---|---|
-| **Only happy path** | Testing `Add(2, 3)` but not `Add(MaxInt, 1)` | Always consider invalid, boundary, and edge cases |
-| **Forgetting negative tests** | Only testing valid transitions in state machine | Test that invalid transitions throw exceptions |
-| **Ignoring combinations** | Testing each parameter in isolation | Use decision tables or pairwise for interactions |
-| **Too many tests per technique** | 50 equivalence partition tests for one partition | One representative per partition is enough |
-
-### 8.3 Coverage Targets by Code Category
-
-Not all code deserves the same level of testing attention:
-
-```
-Code Category                 Target Coverage    Test Design Focus
-──────────────────────────────────────────────────────────────────
-Core business logic           90%+               EP, BVA, decision tables
-Data validation               85%+               EP, BVA (especially invalid)
-Error handling / edge cases   80%+               Branch coverage + negative tests
-API controllers (thin)        70%+               Integration tests (Lecture 3-4)
-DTOs / models                 No unit tests      Tested implicitly through usage
-Generated code / migrations   Exclude            Not worth testing
-Configuration / startup       60%+               Integration tests
-```
-
----
-
-## 9. Summary
+## 15. Summary
 
 ### Ключові висновки
 
-1. **Systematic test design** is superior to ad-hoc testing — it provides rationale, repeatability, and measurable completeness
-2. **Black-box techniques** derive tests from specifications:
-   - **EP** reduces infinite inputs to a manageable number of partitions
-   - **BVA** targets the boundaries where bugs cluster
-   - **Decision tables** systematically cover combinations of conditions
-   - **State transition testing** verifies lifecycle behavior
-   - **Pairwise testing** efficiently handles multi-parameter systems
-3. **White-box techniques** derive tests from code structure:
-   - **Statement coverage** is the minimum (but weakest) criterion
-   - **Branch coverage** is the practical industry standard
-   - **MC/DC** is required for safety-critical systems
-   - **Path coverage** is the strongest but often impractical
-4. **Coverlet** collects coverage data during `dotnet test`; **ReportGenerator** turns it into readable HTML reports
-5. **Coverage is a floor, not a ceiling** — high coverage does not mean good tests, but low coverage reliably indicates gaps
-6. **Combine techniques** — start with black-box tests from the spec, measure coverage, then add white-box tests for gaps
-7. **Integrate coverage into CI** to prevent regression and track trends over time
+1. **CI/CD automates the feedback loop** — code changes are built, tested, and analyzed automatically on every commit, catching issues within minutes
+2. **Continuous Integration** means merging frequently and running automated tests on every change; **Continuous Delivery** means every change is deployable; **Continuous Deployment** means every passing change is deployed automatically
+3. **GitHub Actions** provides CI/CD directly in GitHub with workflows defined in YAML — triggers, jobs, steps, matrix builds, caching, and artifacts
+4. **Code coverage in CI** (Coverlet + ReportGenerator) provides consistent quality metrics and can enforce minimum thresholds as quality gates
+5. **Branch protection rules** prevent unreviewed or untested code from reaching protected branches
+6. **Test management** encompasses test plans, test case management, defect lifecycle tracking, and metrics-based reporting
+7. **Quality gates** define minimum conditions (test pass rate, coverage, code review) that must be met before progressing to the next stage
+8. **Flaky tests** erode CI trust — detect them early, quarantine if needed, fix the root cause, never ignore them
+9. **Docker in CI** (via services or Testcontainers) provides real infrastructure for integration tests in a clean, reproducible way
+10. **Risk-based testing** focuses effort where failures are most likely and most impactful
 
-### Анонс наступної лекції
+### Quick Reference: Essential YAML Patterns
 
-In **Lecture 7: CI/CD and Test Management**, we will:
-- Set up GitHub Actions to run tests automatically on every push
-- Configure coverage collection and reporting in CI pipelines
-- Implement quality gates that block merges when tests fail or coverage drops
-- Explore test management practices: test plans, traceability, and reporting
-- Discuss flaky test management and test suite maintenance
+```yaml
+# Trigger on push and PR
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+# Cache NuGet
+- uses: actions/cache@v5
+  with:
+    path: ~/.nuget/packages
+    key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+
+# Run tests with coverage
+- run: dotnet test --collect:"XPlat Code Coverage" --results-directory ./coverage
+
+# Upload artifact
+- uses: actions/upload-artifact@v4
+  if: always()
+  with:
+    name: results
+    path: ./coverage/
+
+# Job dependency
+jobs:
+  deploy:
+    needs: [build, test]
+
+# Matrix build
+strategy:
+  matrix:
+    os: [ubuntu-latest, windows-latest]
+    dotnet-version: ['9.0.x', '10.0.x']
+```
 
 ---
 
 ## Посилання та додаткова література
 
-- **ISTQB Foundation Level Syllabus** (v4.0, 2023) — Chapters 4 (Test Design Techniques)
-  - https://www.istqb.org/certifications/certified-tester-foundation-level
-- **"Software Testing: A Craftsman's Approach"** — Paul C. Jorgensen (CRC Press, 5th edition, 2021) — Chapters 5-9
-- **"Introduction to Software Testing"** — Paul Ammann, Jeff Offutt (Cambridge University Press, 2nd edition, 2016)
+- **GitHub Actions Documentation** — https://docs.github.com/en/actions
+- **GitHub Actions for .NET** — https://docs.github.com/en/actions/use-cases-and-examples/building-and-testing/building-and-testing-net
 - **Coverlet Documentation** — https://github.com/coverlet-coverage/coverlet
-- **ReportGenerator Documentation** — https://github.com/danielpalme/ReportGenerator
-- **NIST Combinatorial Testing** — https://csrc.nist.gov/projects/automated-combinatorial-testing-for-software
-- **DO-178C** — Software Considerations in Airborne Systems and Equipment Certification (RTCA, 2011)
-- **Pairwise Testing (PICT)** — https://github.com/Microsoft/pict
-- **Stryker.NET (Mutation Testing)** — https://stryker-mutator.io/docs/stryker-net/introduction/
+- **ReportGenerator** — https://github.com/danielpalme/ReportGenerator
+- **Testcontainers for .NET** — https://dotnet.testcontainers.org/
+- **"Continuous Delivery"** — Jez Humble, David Farley (Addison-Wesley, 2010)
+- **"Accelerate: Building and Scaling High Performing Technology Organizations"** — Nicole Forsgren, Jez Humble, Gene Kim (IT Revolution, 2018)
+- **ISTQB Foundation Level Syllabus** (v4.0, 2023) — Chapters 5-6
+- **DORA Metrics** — https://dora.dev/
+- **Martin Fowler: Continuous Integration** — https://martinfowler.com/articles/continuousIntegration.html
+- **GitHub Branch Protection Rules** — https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-a-branch-protection-rule
