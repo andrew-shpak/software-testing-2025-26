@@ -1,384 +1,509 @@
-# Лабораторна 9 — Тестування сервісів: REST API
+# Лабораторна 9 — End-to-End UI тестування: Playwright, Page Object Model та Page Factory
+
+> **Lab → 11 points**
 
 ## Мета
 
-Тестування інтеграцій з зовнішніми REST API з використанням абстракції HTTP-клієнта, обробки відповідей, політик повторних спроб та симуляції поведінки API за допомогою WireMock.
+Навчитися писати end-to-end (E2E) UI-тести для реального веб-додатку за допомогою **Playwright** (JavaScript) та патернів **Page Object Model (POM)** і **Page Factory**. Протестувати головну сторінку, сторінку входу та сторінку профілю користувача на `https://umsys.com.ua`, а також налаштувати CI-пайплайн у GitHub Actions для автоматичного запуску цих тестів.
 
 **Тривалість:** 60 хвилин
 
 ## Передумови
 
-- Встановлений .NET 10 SDK або новіший
-- Основи C#, включаючи інтерфейси, впровадження залежностей та async/await
-- Розуміння HTTP-методів (GET, POST, PUT, DELETE), кодів стану та заголовків
-- Знайомство з `HttpClient` та `IHttpClientFactory` у .NET
-- Розуміння серіалізації/десеріалізації JSON з `System.Text.Json`
-- Базові знання шаблонів стійкості: повторні спроби, переривач ланцюга та тайм-аути
+- Встановлений Node.js 20+ (`node --version`)
+- Встановлений npm або pnpm
+- Обліковий запис на [umsys.com.ua](https://umsys.com.ua) (для тестів автентифікації)
+- Базові знання JavaScript: `async/await`, ES-модулі
+- Розуміння DOM та CSS-селекторів
+- Знайомство з GitHub Actions — хоча б на рівні читання YAML-конфігурацій
 
 ## Ключові концепції
 
 | Концепція | Опис |
 |-----------|------|
-| **Типізований HttpClient** | Строго типізована обгортка навколо `HttpClient`, зареєстрована через `IHttpClientFactory`. Забезпечує чітке розділення та тестованість. |
-| **WireMock.Net** | Внутрішньопроцесний HTTP-сервер, який можна запрограмувати для повернення конкретних відповідей на конкретні запити. Замінює реальний зовнішній API під час тестів. |
-| **Заглушка vs Мок (контекст HTTP)** | Заглушка WireMock повертає заготовлену відповідь. Мок WireMock також перевіряє, що певні запити були зроблені (верифікація запитів). |
-| **Конвеєр стійкості** | Ланцюг стратегій (повторна спроба, переривач ланцюга, тайм-аут), що застосовуються до вихідних HTTP-запитів через `Microsoft.Extensions.Http.Resilience`. |
-| **Політика повторних спроб** | Автоматично повторно надсилає невдалий запит налаштовану кількість разів із необов'язковою затримкою між спробами. Спрямована на тимчасові збої (5xx, мережеві помилки). |
-| **Переривач ланцюга** | Моніторить частоту збоїв і "відкривається" (блокує всі запити), коли збої перевищують поріг, запобігаючи каскадним збоям. Після періоду охолодження "напіввідкривається" для перевірки відновлення. |
-| **Тайм-аут спроби** | Скасовує окремий HTTP-запит, якщо він не завершується протягом налаштованої тривалості. Відрізняється від загального тайм-ауту для всіх повторних спроб. |
-| **IAsyncLifetime** | Інтерфейс xUnit для асинхронного налаштування (`InitializeAsync`) та очищення (`DisposeAsync`). Використовується для запуску та зупинки сервера WireMock для кожного класу тестів. |
+| **End-to-End (E2E) тест** | Тест, що імітує взаємодію реального користувача з UI — натискання, введення, навігацію. Перевіряє всю систему "наскрізно": браузер → фронтенд → API → БД. |
+| **Playwright** | Сучасний фреймворк для автоматизації браузерів (Chromium, Firefox, WebKit). Пакет `@playwright/test` містить і test runner, і бібліотеку. Має авто-очікування та ізольовані контексти. |
+| **Page Object Model (POM)** | Патерн, у якому кожна сторінка UI представлена окремим класом, що інкапсулює локатори та дії. Тести стають декларативними, а зміна верстки вимагає правок лише в одному місці. |
+| **Page Factory** | Фабрика, що централізує створення об'єктів сторінок. Тест отримує `PageFactory`, а не конструює `HomePage`/`SignInPage`/`ProfilePage` вручну — це спрощує DI, кешування та підстановку моків. У Playwright (JS) фабрика часто віддається через **fixture**. |
+| **Fixture** | Механізм Playwright Test для інʼєкції залежностей у тест. Через `test.extend` створюються власні фікстури (наприклад, `pages: PageFactory`), що автоматично передаються у тест. |
+| **Локатор** | Стратегія пошуку елемента на сторінці (`getByRole`, `getByText`, `getByTestId`, CSS). Рекомендовано обирати user-facing локатори (роль, текст, мітка) — вони стабільніші за CSS-класи. |
+| **Storage State** | JSON-файл із cookies та localStorage, що дозволяє перевикористовувати авторизацію між тестами без повторного входу (через `storageState` у `use` або `playwright.config`). |
+| **Trace Viewer** | Запис кроків тесту з DOM-знімками, консольними повідомленнями та скриншотами. Увімкнення: `trace: 'on-first-retry'` у конфігу. Незамінний для діагностики падінь у CI. |
 
 ## Інструменти
 
-- Мова: C#
-- HTTP: `HttpClient` / `IHttpClientFactory`
-- Мок-сервер: [WireMock.Net](https://github.com/WireMock-Net/WireMock.Net)
-- Стійкість: [Microsoft.Extensions.Http.Resilience](https://learn.microsoft.com/en-us/dotnet/core/resilience)
-- Фреймворк: [xUnit v3](https://xunit.net/) (`xunit.v3`)
+- Мова: **JavaScript** (Node.js 20+)
+- Фреймворк UI-тестів: [`@playwright/test`](https://playwright.dev/docs/intro)
+- CI: [GitHub Actions](https://docs.github.com/en/actions)
+- SUT: [umsys.com.ua](https://umsys.com.ua)
 
 ## Налаштування
 
 ```bash
-dotnet new sln -n Lab9
-dotnet new classlib -n Lab9.Core
-dotnet new classlib -n Lab9.Tests
-dotnet sln add Lab9.Core Lab9.Tests
-dotnet add Lab9.Core package Microsoft.Extensions.Http
-dotnet add Lab9.Core package Microsoft.Extensions.Http.Resilience
-dotnet add Lab9.Tests reference Lab9.Core
-dotnet add Lab9.Tests package xunit.v3
-dotnet add Lab9.Tests package Microsoft.NET.Test.Sdk
-dotnet add Lab9.Tests package WireMock.Net
-dotnet add Lab9.Tests package Shouldly
+mkdir Lab9.E2E && cd Lab9.E2E
+npm init -y
+npm i -D @playwright/test
+npx playwright install --with-deps        # усі 3 браузери: chromium, firefox, webkit
+npx playwright install-deps               # за потреби системних залежностей
+```
+
+Додайте у `package.json`:
+
+```json
+{
+  "type": "module",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "report": "playwright show-report"
+  }
+}
+```
+
+Створіть `playwright.config.js`:
+
+```js
+// playwright.config.js
+import { defineConfig, devices } from '@playwright/test';
+
+export default defineConfig({
+  testDir: './tests',
+  fullyParallel: true,
+  retries: process.env.CI ? 2 : 0,
+  reporter: [['html', { open: 'never' }], ['list']],
+  use: {
+    baseURL: 'https://umsys.com.ua',
+    trace: 'on-first-retry',
+    screenshot: 'only-on-failure',
+    video: 'retain-on-failure',
+  },
+  projects: [
+    { name: 'chromium', use: { ...devices['Desktop Chrome']  } },
+    { name: 'firefox',  use: { ...devices['Desktop Firefox'] } },
+    { name: 'webkit',   use: { ...devices['Desktop Safari']  } },
+  ],
+});
+```
+
+## Структура проєкту
+
+```
+Lab9.E2E/
+├── pages/
+│   ├── base-page.js
+│   ├── home-page.js
+│   ├── sign-in-page.js
+│   ├── profile-page.js
+│   └── page-factory.js
+├── fixtures/
+│   └── pages.js          # test.extend з PageFactory + storageState
+├── tests/
+│   ├── home.spec.js
+│   ├── sign-in.spec.js
+│   └── profile.spec.js
+├── .auth/
+│   └── user.json         # storageState (в .gitignore!)
+├── playwright.config.js
+└── package.json
 ```
 
 ## Завдання
 
-### Завдання 1 — Клієнт зовнішнього API
+### Завдання 1 — Page Object базовий клас, Page Factory та головна сторінка (`umsys.com.ua`)
 
-Створіть типізований HTTP-клієнт для гіпотетичного User API:
+#### 1.1 BasePage
 
-```csharp
-public interface IUserApiClient
-{
-    Task<User> GetUserAsync(int id);
-    Task<IEnumerable<User>> GetUsersAsync(int page, int pageSize);
-    Task<User> CreateUserAsync(CreateUserRequest request);
-    Task UpdateUserAsync(int id, UpdateUserRequest request);
-    Task DeleteUserAsync(int id);
-}
+```js
+// pages/base-page.js
+export class BasePage {
+  /** @param {import('@playwright/test').Page} page */
+  constructor(page) {
+    this.page = page;
+  }
 
-public class UserApiClient : IUserApiClient
-{
-    private readonly HttpClient _httpClient;
-    // Реалізуйте всі методи з належною обробкою помилок
-    // Зіставте HTTP-коди стану з відповідними винятками
-}
-```
+  /** Дочірні класи перевизначають */
+  get path() { return '/'; }
 
-Реалізуйте:
+  async goto() {
+    return this.page.goto(this.path, { waitUntil: 'networkidle' });
+  }
 
-- Належну десеріалізацію відповідей
-- Генерацію `NotFoundException` для 404
-- Генерацію `ApiException` для 5xx з інформацією про повторну спробу
-- Зіставлення помилок валідації (400) з `ValidationException`
-
-**Приклад — доменні моделі та користувацькі винятки**
-
-```csharp
-public record User(int Id, string Name, string Email);
-public record CreateUserRequest(string Name, string Email);
-public record UpdateUserRequest(string Name, string Email);
-
-public class NotFoundException : Exception
-{
-    public NotFoundException(string message) : base(message) { }
-}
-
-public class ApiException : Exception
-{
-    public int StatusCode { get; }
-    public ApiException(int statusCode, string message)
-        : base(message) => StatusCode = statusCode;
-}
-
-public class ValidationException : Exception
-{
-    public IDictionary<string, string[]> Errors { get; }
-    public ValidationException(IDictionary<string, string[]> errors)
-        : base("Validation failed") => Errors = errors;
+  title() { return this.page.title(); }
 }
 ```
 
-**Приклад — реалізація UserApiClient (частково)**
+#### 1.2 HomePage
 
-```csharp
-public class UserApiClient : IUserApiClient
-{
-    private readonly HttpClient _httpClient;
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNameCaseInsensitive = true
-    };
+```js
+// pages/home-page.js
+import { BasePage } from './base-page.js';
 
-    public UserApiClient(HttpClient httpClient)
-    {
-        _httpClient = httpClient;
-    }
+export class HomePage extends BasePage {
+  get path() { return '/'; }
 
-    public async Task<User> GetUserAsync(int id)
-    {
-        var response = await _httpClient.GetAsync($"/users/{id}");
+  get signInLink() {
+    return this.page.getByRole('link', { name: /sign[- ]?in|увійти/i });
+  }
 
-        if (response.StatusCode == HttpStatusCode.NotFound)
-            throw new NotFoundException($"User {id} not found");
+  get heroHeading() {
+    return this.page.getByRole('heading').first();
+  }
 
-        response.EnsureSuccessStatusCode();
-
-        return await response.Content
-            .ReadFromJsonAsync<User>(JsonOptions)
-            ?? throw new InvalidOperationException("Null response body");
-    }
-
-    // Реалізуйте решту методів за тим самим шаблоном...
+  async openSignIn() {
+    await this.signInLink.click();
+  }
 }
 ```
 
-**Очікуване зіставлення кодів стану**
+#### 1.3 PageFactory
 
-| HTTP-код стану | Очікувана поведінка |
-|----------------|---------------------|
-| 200 OK | Десеріалізувати та повернути тіло відповіді |
-| 201 Created | Десеріалізувати створену сутність з тіла відповіді |
-| 204 No Content | Повернути успішно (тіло для розбору відсутнє) |
-| 400 Bad Request | Згенерувати `ValidationException` з деталями помилок на рівні полів |
-| 404 Not Found | Згенерувати `NotFoundException` з описовим повідомленням |
-| 500 Internal Server Error | Згенерувати `ApiException` з кодом стану |
-| 502 Bad Gateway | Згенерувати `ApiException` (тимчасова помилка, підлягає повторній спробі) |
-| 503 Service Unavailable | Згенерувати `ApiException` (тимчасова помилка, підлягає повторній спробі) |
+```js
+// pages/page-factory.js
+import { HomePage }    from './home-page.js';
+import { SignInPage }  from './sign-in-page.js';
+import { ProfilePage } from './profile-page.js';
 
-**Мінімальна кількість тестів для Завдання 1**: 4 тести (покриття основних методів інтерфейсу, перевірка успішного шляху).
+export class PageFactory {
+  /** @param {import('@playwright/test').Page} page */
+  constructor(page) {
+    this.page = page;
+  }
 
-> **Підказка**: Зареєструйте `UserApiClient` як типізований клієнт, щоб `IHttpClientFactory` керував часом життя його `HttpClient`. Це запобігає вичерпанню сокетів:
-> ```csharp
-> services.AddHttpClient<IUserApiClient, UserApiClient>(client =>
-> {
->     client.BaseAddress = new Uri("https://api.example.com");
-> });
-> ```
-
-### Завдання 2 — Інтеграційні тести з WireMock
-
-Використовуйте WireMock.Net для симуляції зовнішнього API:
-
-```csharp
-var server = WireMockServer.Start();
-```
-
-Напишіть тести, які:
-
-1. Імітують `GET /users/1`, що повертає JSON-користувача — перевірте десеріалізацію
-2. Імітують `GET /users/999`, що повертає 404 — перевірте, що генерується `NotFoundException`
-3. Імітують `POST /users`, що повертає 201 із заголовком `Location` — перевірте розбір відповіді
-4. Імітують `GET /users` з параметрами запиту — перевірте, що пагінація надсилається коректно
-
-*Необов'язково (якщо є час):*
-- Імітувати повільну відповідь (затримка 5 секунд) — перевірити обробку тайм-ауту
-- Імітувати послідовність: перший виклик повертає 500, другий — 200 — перевірити роботу повторних спроб
-- Перевірити, що заголовки запиту (`Content-Type`, `Authorization`) надсилаються коректно
-
-**Приклад — тестова фікстура WireMock з IAsyncLifetime**
-
-```csharp
-using WireMock.Server;
-using WireMock.RequestBuilders;
-using WireMock.ResponseBuilders;
-using System.Text.Json;
-
-public class UserApiClientTests : IAsyncLifetime
-{
-    private WireMockServer _server = null!;
-    private UserApiClient _client = null!;
-
-    public Task InitializeAsync()
-    {
-        _server = WireMockServer.Start();
-        var httpClient = new HttpClient
-        {
-            BaseAddress = new Uri(_server.Url!)
-        };
-        _client = new UserApiClient(httpClient);
-        return Task.CompletedTask;
-    }
-
-    public Task DisposeAsync()
-    {
-        _server.Stop();
-        _server.Dispose();
-        return Task.CompletedTask;
-    }
-
-    [Fact]
-    public async Task GetUserAsync_ReturnsUser_WhenApiReturns200Async()
-    {
-        // Arrange
-        _server
-            .Given(Request.Create().WithPath("/users/1").UsingGet())
-            .RespondWith(Response.Create()
-                .WithStatusCode(200)
-                .WithHeader("Content-Type", "application/json")
-                .WithBody(JsonSerializer.Serialize(
-                    new { Id = 1, Name = "Alice", Email = "alice@example.com" }))
-            );
-
-        // Act
-        var user = await _client.GetUserAsync(1);
-
-        // Assert
-        user.Id.ShouldBe(1);
-        user.Name.ShouldBe("Alice");
-        user.Email.ShouldBe("alice@example.com");
-    }
-
-    [Fact]
-    public async Task GetUserAsync_ThrowsNotFoundException_WhenApiReturns404Async()
-    {
-        // Arrange
-        _server
-            .Given(Request.Create().WithPath("/users/999").UsingGet())
-            .RespondWith(Response.Create().WithStatusCode(404));
-
-        // Act & Assert
-        await Should.ThrowAsync<NotFoundException>(
-            () => _client.GetUserAsync(999));
-    }
+  home()           { return new HomePage(this.page); }
+  signIn()         { return new SignInPage(this.page); }
+  profile(email)   { return new ProfilePage(this.page, email); }
 }
 ```
 
-**Приклад — тестування повільної відповіді (тайм-аут)**
+> **Чому фабрика?** Тест не знає про конкретні конструктори. Якщо сторінці знадобиться залежність (логер, конфіг, перемикач фіч) — зміниться лише фабрика, а не десятки тестових файлів.
 
-```csharp
-[Fact]
-public async Task GetUserAsync_ThrowsTaskCanceledException_WhenResponseIsSlowAsync()
-{
-    // Arrange
-    _server
-        .Given(Request.Create().WithPath("/users/1").UsingGet())
-        .RespondWith(Response.Create()
-            .WithStatusCode(200)
-            .WithHeader("Content-Type", "application/json")
-            .WithBody(JsonSerializer.Serialize(
-                new { Id = 1, Name = "Slow", Email = "slow@example.com" }))
-            .WithDelay(TimeSpan.FromSeconds(5))
-        );
+#### 1.4 Fixture з PageFactory
 
-    var httpClient = new HttpClient
-    {
-        BaseAddress = new Uri(_server.Url!),
-        Timeout = TimeSpan.FromSeconds(2) // тайм-аут до затримки 5 с
-    };
-    var client = new UserApiClient(httpClient);
+```js
+// fixtures/pages.js
+import { test as base, expect } from '@playwright/test';
+import { PageFactory } from '../pages/page-factory.js';
 
-    // Act & Assert
-    await Should.ThrowAsync<TaskCanceledException>(
-        () => client.GetUserAsync(1));
+export const test = base.extend({
+  pages: async ({ page }, use) => {
+    await use(new PageFactory(page));
+  },
+});
+
+export { expect };
+```
+
+#### 1.5 Тести головної сторінки
+
+```js
+// tests/home.spec.js
+import { test, expect } from '../fixtures/pages.js';
+
+test.describe('Home page', () => {
+  test('loads successfully and shows a non-empty title', async ({ pages, page }) => {
+    const response = await page.goto('/', { waitUntil: 'networkidle' });
+
+    expect(response?.status()).toBe(200);
+    expect(await pages.home().title()).not.toBe('');
+    await expect(pages.home().heroHeading).toBeVisible();
+  });
+
+  test('sign-in link navigates to /sign-in', async ({ pages, page }) => {
+    const home = pages.home();
+    await home.goto();
+
+    await home.openSignIn();
+
+    await expect(page).toHaveURL(/\/sign-in\/?$/);
+  });
+
+  test('has a visible sign-in link on load', async ({ pages }) => {
+    const home = pages.home();
+    await home.goto();
+
+    await expect(home.signInLink).toBeVisible();
+  });
+});
+```
+
+**Мінімальна кількість тестів для Завдання 1**: 3 тести.
+
+### Завдання 2 — Сторінка входу (`umsys.com.ua/sign-in`)
+
+```js
+// pages/sign-in-page.js
+import { BasePage } from './base-page.js';
+
+export class SignInPage extends BasePage {
+  get path() { return '/sign-in'; }
+
+  get emailInput()    { return this.page.getByLabel(/e-?mail/i); }
+  get passwordInput() { return this.page.getByLabel(/password|пароль/i); }
+  get submitButton()  { return this.page.getByRole('button', { name: /sign in|увійти|log in/i }); }
+  get errorMessage()  { return this.page.getByRole('alert'); }
+
+  async login(email, password) {
+    await this.emailInput.fill(email);
+    await this.passwordInput.fill(password);
+    await this.submitButton.click();
+  }
 }
 ```
 
-**Приклад — тестування повторної спроби з послідовністю відповідей**
+Тести для `/sign-in` **не перевіряють фактичну автентифікацію** — жодних реальних облікових даних тут не використовується. Ми перевіряємо лише **структуру сторінки та клієнтську поведінку форми**. Логін як потік виконується один раз у `auth.setup.js` (Завдання 3).
 
-```csharp
-[Fact]
-public async Task GetUserAsync_RetriesAndSucceeds_WhenFirstCallFailsAsync()
-{
-    // Arrange: перший виклик повертає 500, другий — 200
-    _server
-        .Given(Request.Create().WithPath("/users/1").UsingGet())
-        .InScenario("retry")
-        .WillSetStateTo("first-call-done")
-        .RespondWith(Response.Create().WithStatusCode(500));
+```js
+// tests/sign-in.spec.js
+import { test, expect } from '../fixtures/pages.js';
 
-    _server
-        .Given(Request.Create().WithPath("/users/1").UsingGet())
-        .InScenario("retry")
-        .WhenStateIs("first-call-done")
-        .RespondWith(Response.Create()
-            .WithStatusCode(200)
-            .WithHeader("Content-Type", "application/json")
-            .WithBody(JsonSerializer.Serialize(
-                new { Id = 1, Name = "Alice", Email = "alice@example.com" }))
-        );
+test.describe('Sign in page (no auth)', () => {
+  test.beforeEach(async ({ pages }) => {
+    await pages.signIn().goto();
+  });
 
-    // Act — клієнт (або його обробник стійкості) повинен повторити спробу
-    var user = await _client.GetUserAsync(1);
+  test('form renders with email, password and submit', async ({ pages }) => {
+    const signIn = pages.signIn();
 
-    // Assert
-    user.ShouldNotBeNull();
-    user.Name.ShouldBe("Alice");
+    await expect(signIn.emailInput).toBeVisible();
+    await expect(signIn.passwordInput).toBeVisible();
+    await expect(signIn.submitButton).toBeVisible();
+  });
+
+  test('email input has type="email" and password is masked', async ({ pages }) => {
+    const signIn = pages.signIn();
+
+    await expect(signIn.emailInput).toHaveAttribute('type', 'email');
+    await expect(signIn.passwordInput).toHaveAttribute('type', 'password');
+  });
+
+  test('submitting empty form keeps user on /sign-in (no network call)', async ({ pages, page }) => {
+    const signIn = pages.signIn();
+
+    await signIn.submitButton.click();
+
+    // Жодного переходу не відбулось — або HTML5-валідація, або клієнтська перевірка.
+    await expect(page).toHaveURL(/\/sign-in/);
+  });
+});
+```
+
+**Мінімальна кількість тестів для Завдання 2**: 3 тести — усі **без** реальних облікових даних.
+
+> **Чому без auth?** Фактичний логін — це відповідальність `auth.setup.js` у Завданні 3: він робить це один раз і зберігає сесію у `storageState`. Дублювати логін у тестах сторінки `/sign-in` зайве і крихке (капчі, rate limits, зміни backend). Тут ми тестуємо **сторінку**, а не **систему автентифікації**.
+
+### Завдання 3 — Сторінка профілю (`umsys.com.ua/<your-email>`)
+
+Сторінка профілю доступна лише автентифікованим користувачам. Замість повторного логіну в кожному тесті створіть одноразовий **authentication setup**, який збереже `storageState` у `.auth/user.json`, і перевикористайте його через окремий проєкт `playwright.config`.
+
+#### 3.1 Setup-проєкт в конфігу
+
+```js
+// playwright.config.js (розширення)
+projects: [
+  { name: 'setup', testMatch: /.*\.setup\.js/ },
+
+  {
+    name: 'chromium',
+    dependencies: ['setup'],
+    use: { ...devices['Desktop Chrome'],  storageState: '.auth/user.json' },
+  },
+  {
+    name: 'firefox',
+    dependencies: ['setup'],
+    use: { ...devices['Desktop Firefox'], storageState: '.auth/user.json' },
+  },
+  {
+    name: 'webkit',
+    dependencies: ['setup'],
+    use: { ...devices['Desktop Safari'],  storageState: '.auth/user.json' },
+  },
+],
+```
+
+> **Примітка:** `setup` виконується один раз для сесії, а `.auth/user.json` перевикористовується усіма трьома browser-проєктами. Тести запускаються паралельно в Chromium, Firefox та WebKit.
+
+#### 3.2 Auth setup
+
+```js
+// tests/auth.setup.js
+import { test as setup, expect } from '@playwright/test';
+import { SignInPage } from '../pages/sign-in-page.js';
+
+const authFile = '.auth/user.json';
+
+setup('authenticate', async ({ page }) => {
+  const email = process.env.UMSYS_EMAIL;
+  const password = process.env.UMSYS_PASSWORD;
+  if (!email || !password) {
+    throw new Error('UMSYS_EMAIL / UMSYS_PASSWORD must be set');
+  }
+
+  await page.goto('/sign-in');
+  const signIn = new SignInPage(page);
+  await signIn.login(email, password);
+
+  await page.waitForURL(new RegExp(`/${email.replace(/[.@+]/g, '\\$&')}/?$`));
+  await page.context().storageState({ path: authFile });
+});
+```
+
+#### 3.3 ProfilePage
+
+```js
+// pages/profile-page.js
+import { BasePage } from './base-page.js';
+
+export class ProfilePage extends BasePage {
+  constructor(page, email) {
+    super(page);
+    this.email = email;
+  }
+
+  get path() { return `/${this.email}`; }
+
+  get profileHeading() { return this.page.getByRole('heading').first(); }
+  get signOutButton()  { return this.page.getByRole('button', { name: /sign out|вийти|log out/i }); }
+
+  async signOut() { await this.signOutButton.click(); }
 }
 ```
 
-**Приклад — перевірка надісланих заголовків запиту**
+#### 3.4 Тести профілю
 
-```csharp
-[Fact]
-public async Task CreateUserAsync_SendsCorrectContentTypeAsync()
-{
-    // Arrange
-    _server
-        .Given(Request.Create().WithPath("/users").UsingPost())
-        .RespondWith(Response.Create()
-            .WithStatusCode(201)
-            .WithHeader("Content-Type", "application/json")
-            .WithBody(JsonSerializer.Serialize(
-                new { Id = 42, Name = "Bob", Email = "bob@example.com" }))
-        );
+```js
+// tests/profile.spec.js
+import { test, expect } from '../fixtures/pages.js';
 
-    // Act
-    var user = await _client.CreateUserAsync(
-        new CreateUserRequest("Bob", "bob@example.com"));
+const EMAIL = process.env.UMSYS_EMAIL;
 
-    // Assert — перевірка, що WireMock отримав коректні заголовки
-    _server.LogEntries.ShouldContain(entry =>
-        entry.RequestMessage.Headers!.ContainsKey("Content-Type") &&
-        entry.RequestMessage.Headers["Content-Type"]
-            .Any(v => v.Contains("application/json")));
-}
+test.describe('Profile page (authenticated)', () => {
+  test('loads for authenticated user', async ({ pages, page }) => {
+    test.skip(!EMAIL, 'UMSYS_EMAIL not set');
+    const profile = pages.profile(EMAIL);
+    await profile.goto();
+
+    await expect(page).toHaveURL(new RegExp(`/${EMAIL.replace(/[.@+]/g, '\\$&')}/?$`));
+    await expect(profile.profileHeading).toBeVisible();
+  });
+
+  test('sign-out returns to sign-in or home', async ({ pages, page }) => {
+    test.skip(!EMAIL, 'UMSYS_EMAIL not set');
+    const profile = pages.profile(EMAIL);
+    await profile.goto();
+
+    await profile.signOut();
+
+    await expect(page).toHaveURL(/\/(sign-in)?\/?$/);
+  });
+});
+
+test.describe('Profile page (anonymous)', () => {
+  test.use({ storageState: { cookies: [], origins: [] } }); // без сесії
+
+  test('anonymous visitor is redirected to /sign-in', async ({ page }) => {
+    test.skip(!EMAIL, 'UMSYS_EMAIL not set');
+    await page.goto(`/${EMAIL}`);
+
+    await expect(page).toHaveURL(/\/sign-in/);
+  });
+});
 ```
 
-**Мінімальна кількість тестів для Завдання 2**: 5 тестів (4 обов'язкових сценарії вище + щонайменше 1 необов'язковий сценарій).
+**Мінімальна кількість тестів для Завдання 3**: 3 тести (2 автентифіковані + 1 анонімний редірект).
 
-**Бонус (якщо є час):** Налаштуйте стійкість за допомогою `AddStandardResilienceHandler` та протестуйте поведінку повторних спроб.
+> **Підказка:** `test.use({ storageState: { cookies: [], origins: [] } })` скидає авторизацію саме для цього `describe`-блоку, хоча глобальний конфіг використовує `.auth/user.json`.
 
-> **Підказка**: Завжди скидайте сервер WireMock між тестами, якщо вони використовують спільний екземпляр. Ви можете викликати `_server.Reset()` у методі налаштування або використовувати `IAsyncLifetime` для створення нового сервера на клас. Якщо ізоляція окремих тестів критична, створюйте сервер для кожного тесту.
+### Завдання 4 — CI у GitHub Actions
 
-> **Підказка**: Використовуйте API `InScenario` / `WillSetStateTo` / `WhenStateIs` WireMock для створення послідовностей відповідей зі станом (наприклад, перший виклик невдалий, другий успішний).
+Створіть workflow `.github/workflows/lab9-e2e.yml` для автоматичного запуску UI-тестів у CI.
+
+```yaml
+# .github/workflows/lab9-e2e.yml
+name: Lab-9 E2E (Playwright)
+
+on:
+  push:
+    branches: [ "**" ]
+  workflow_dispatch:
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, firefox, webkit]
+    defaults:
+      run:
+        working-directory: Lab-9/Lab9.E2E
+    env:
+      UMSYS_EMAIL: ${{ secrets.UMSYS_EMAIL }}
+      UMSYS_PASSWORD: ${{ secrets.UMSYS_PASSWORD }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: Lab-9/Lab9.E2E/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browser (${{ matrix.browser }})
+        run: npx playwright install --with-deps ${{ matrix.browser }}
+
+      - name: Run Playwright tests on ${{ matrix.browser }}
+        run: npx playwright test --project=setup --project=${{ matrix.browser }}
+
+      - name: Upload Playwright report (${{ matrix.browser }})
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-${{ matrix.browser }}
+          path: Lab-9/Lab9.E2E/playwright-report/
+          retention-days: 7
+
+      - name: Upload traces on failure (${{ matrix.browser }})
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-traces-${{ matrix.browser }}
+          path: Lab-9/Lab9.E2E/test-results/
+          retention-days: 7
+```
+
+> **Секрети у GitHub:** Settings → Secrets and variables → Actions → New repository secret. Створіть `UMSYS_EMAIL` та `UMSYS_PASSWORD`. Перевірте, що у `.gitignore` є `.auth/` та `node_modules/` — вони **не** мають потрапляти в репозиторій.
 
 ## Оцінювання
 
-| Критерії |
-|----------|
-| Завдання 1 — Реалізація клієнта API |
-| Завдання 2 — Тести WireMock |
-| Належна ієрархія винятків |
-| Очищення сервера WireMock (IDisposable) |
+**Lab → 11 points**
+
+| Критерії | Бали |
+|----------|:----:|
+| Завдання 1 — `BasePage`, `HomePage`, `PageFactory`, fixture + 3 тести | 3 |
+| Завдання 2 — `SignInPage` + 3 тести (форма, помилка, успіх) | 3 |
+| Завдання 3 — `ProfilePage` + `auth.setup.js` із `storageState` + 3 тести | 3 |
+| Завдання 4 — GitHub Actions workflow із секретами та артефактами | 2 |
+| **Разом** | **11** |
 
 ## Здача роботи
 
-- Рішення з проєктами `Lab9.Core` та `Lab9.Tests`
-- Сервер WireMock запускається/зупиняється для кожного класу тестів за допомогою `IAsyncLifetime`
+- Проєкт `Lab9.E2E` з `package.json`, `playwright.config.js` та структурою `pages/ fixtures/ tests/`
+- Працюючий `.github/workflows/lab9-e2e.yml` (успішний run у вашому форку)
+- Посилання на зелений CI run
+- `.auth/user.json` та `node_modules/` у `.gitignore`
 
 ## Посилання
 
-- [WireMock.Net Wiki](https://github.com/WireMock-Net/WireMock.Net/wiki)
-- [WireMock.Net — Request Matching](https://github.com/WireMock-Net/WireMock.Net/wiki/Request-Matching)
-- [WireMock.Net — Response Templating](https://github.com/WireMock-Net/WireMock.Net/wiki/Response-Templating)
-- [WireMock.Net — Scenarios and Stateful Behavior](https://github.com/WireMock-Net/WireMock.Net/wiki/Scenarios-and-Stateful-Behavior)
-- [Microsoft.Extensions.Http.Resilience Documentation](https://learn.microsoft.com/en-us/dotnet/core/resilience/http-resilience)
-- [Building Resilient Cloud Services with .NET](https://devblogs.microsoft.com/dotnet/building-resilient-cloud-services-with-dotnet-8/)
-- [IHttpClientFactory Guidelines](https://learn.microsoft.com/en-us/dotnet/core/extensions/httpclient-factory)
-- [Typed HttpClient in ASP.NET Core](https://learn.microsoft.com/en-us/aspnet/core/fundamentals/http-requests#typed-clients)
-- [Polly — Resilience and Transient Fault Handling](https://github.com/App-vNext/Polly)
-- [xUnit v3 — IAsyncLifetime](https://xunit.net/docs/shared-context#async-lifetime)
-- [Shouldly Assertion Library](https://docs.shouldly.org/)
-- [System.Text.Json Overview](https://learn.microsoft.com/en-us/dotnet/standard/serialization/system-text-json/overview)
+- [Playwright — Getting Started](https://playwright.dev/docs/intro)
+- [Playwright — Locators](https://playwright.dev/docs/locators)
+- [Playwright — Page Object Models](https://playwright.dev/docs/pom)
+- [Playwright — Test Fixtures](https://playwright.dev/docs/test-fixtures)
+- [Playwright — Authentication](https://playwright.dev/docs/auth)
+- [Playwright — Trace Viewer](https://playwright.dev/docs/trace-viewer)
+- [Playwright — CI: GitHub Actions](https://playwright.dev/docs/ci-intro)
+- [GitHub Actions — Encrypted Secrets](https://docs.github.com/en/actions/security-guides/encrypted-secrets)
