@@ -1,366 +1,398 @@
-# Лабораторна 8 — Тестування продуктивності: профілювання та бенчмарки
+# Лабораторна 8 — CI/CD з GitHub Actions: міграції, якість гілок, тести та навантаження
 
 ## Мета
 
-Навчитися писати мікробенчмарки для коду C#, профілювати виділення пам'яті та знаходити вузькі місця продуктивності за допомогою BenchmarkDotNet.
+Побудувати повноцінний CI/CD-конвеєр на GitHub Actions для ASP.NET Core API з Entity Framework Core. Конвеєр має автоматично перевіряти імена гілок, виконувати міграції БД, запускати збірку з інтеграційними тестами на Testcontainers та проводити performance-тести з k6.
 
 **Тривалість:** 60 хвилин
 
 ## Передумови
 
-- Встановлений .NET 10 SDK або новіший
-- Основи C#, включаючи узагальнення, LINQ, async/await та `Span<T>`
-- Розуміння типів значень та посилальних типів у .NET
-- Знайомство зі збирачем сміття .NET (колекції Gen0 / Gen1 / Gen2)
-- Встановлені інструменти CLI `dotnet-counters` та `dotnet-trace` (`dotnet tool install -g dotnet-counters` та `dotnet tool install -g dotnet-trace`)
-- Бенчмарки **повинні** запускатися в режимі Release для отримання валідних результатів
+- GitHub-акаунт та публічний (або приватний з увімкненими Actions) репозиторій
+- Встановлений .NET 10 SDK локально — щоб перевіряти зміни перед push
+- Встановлений та запущений Docker (для локального прогону Testcontainers перед push)
+- Виконана Лабораторна 6 — для цієї лабораторної використовується той самий API (`Lectures.Api`) з PostgreSQL та EF Core
+- Базове знайомство з YAML
+- Базове знайомство з Git (гілки, pull request, merge)
+- Повний доступ до налаштувань репозиторію (Settings → Actions, Settings → Branches) — без цього неможливо перевірити захист гілок
 
 ## Ключові концепції
 
 | Концепція | Опис |
 |-----------|------|
-| **Мікробенчмарк** | Точне вимірювання однієї ізольованої операції (наприклад, один виклик методу). BenchmarkDotNet автоматично обробляє розігрів, кількість ітерацій та статистичний аналіз. |
-| **MemoryDiagnoser** | Діагностичний засіб BenchmarkDotNet, який звітує про виділені байти та колекції GC на операцію. Необхідний для пошуку прихованих виділень пам'яті. |
-| **Розігрів** | Початкові ітерації, які відкидаються, щоб JIT-компілятор мав час оптимізувати код. BenchmarkDotNet робить це автоматично. |
-| **Базовий рівень** | Метод бенчмарку, позначений `[Benchmark(Baseline = true)]`. Усі інші методи класу порівнюються з ним, показуючи співвідношення в таблиці результатів. |
-| **Навантаження на GC** | Швидкість, з якою об'єкти виділяються та збираються. Високе навантаження на GC означає часті паузи та знижену пропускну здатність. |
-| **Span\<T\>** | Виділений на стеку подання з перевіркою меж для безперервної пам'яті. Уникає виділень у купі при нарізці масивів або рядків. |
-| **ObjectPool\<T\>** | Пул повторно використовуваних об'єктів, що уникає повторного виділення та навантаження на GC для часто створюваних/знищуваних екземплярів. |
-| **ValueTask\<T\>** | Легка альтернатива `Task<T>`, що уникає виділення в купі, коли результат вже доступний синхронно. |
-| **Тест на регресію продуктивності** | Тест xUnit, який перевіряє, що операція завершується в межах часового бюджету, виявляючи регресії в CI. |
+| **Workflow** | YAML-файл у `.github/workflows/*.yml`, що описує автоматизований процес. Триггерується подіями в репозиторії. |
+| **Job** | Набір кроків, що виконуються на одному раннері. Jobs можуть виконуватись паралельно або послідовно (через `needs`). |
+| **Step** | Одна операція всередині job: shell-команда (`run`) або переви­користовувана дія (`uses`). |
+| **Trigger** | Подія, що запускає workflow: `push`, `pull_request`, `workflow_dispatch`, `schedule`. |
+| **Runner** | Віртуальна машина, що виконує job. `ubuntu-latest` має попередньо встановлений Docker, .NET SDK та GitHub CLI. |
+| **Testcontainers in CI** | Бібліотека, що запускає Docker-контейнери з коду тесту. На `ubuntu-latest` працює, бо Docker вже встановлений. |
+| **Artifact** | Файл або директорія, що зберігається після завершення job (результати тестів, SQL-скрипти, HTML-звіти). Доступний для завантаження з UI Actions. |
+| **Branch protection** | Правило, що блокує push/merge у захищену гілку, доки не пройдуть обрані status checks (наприклад, `build-and-test`). |
+| **Status check** | Результат job, що відображається в PR. Ім'я job стає ім'ям status check. |
+| **Idempotent migration script** | SQL-скрипт, згенерований `dotnet ef migrations script --idempotent`, який можна безпечно застосовувати кілька разів на одну і ту ж БД. |
+| **workflow_dispatch** | Триггер, що дозволяє запускати workflow вручну з UI GitHub із параметрами. |
 
 ## Інструменти
 
-- Мова: C#
-- Бенчмаркінг: [BenchmarkDotNet](https://benchmarkdotnet.org/)
-- Профілювання: `dotnet-counters`, `dotnet-trace`
-- Фреймворк: [xUnit v3](https://xunit.net/) (`xunit.v3`)
+- CI/CD: [GitHub Actions](https://docs.github.com/en/actions)
+- Мова: C# / ASP.NET Core Web API (система, що тестується — `Lectures.Api` з Лабораторної 6)
+- ORM: [Entity Framework Core](https://learn.microsoft.com/en-us/ef/core/) + інструменти `dotnet-ef`
+- База даних: PostgreSQL 18
+- Інтеграційні тести: [Testcontainers для .NET](https://dotnet.testcontainers.org/) + [xUnit v3](https://xunit.net/)
+- Performance-тести: [k6](https://k6.io/) (встановлюється у workflow через [`grafana/setup-k6-action`](https://github.com/grafana/setup-k6-action))
 
 ## Налаштування
 
+Переконайтеся, що у репозиторії існує директорія `.github/workflows/`. Якщо ні — створіть її:
+
 ```bash
-dotnet new sln -n Lab8
-dotnet new classlib -n Lab8.Core
-dotnet new console -n Lab8.Benchmarks
-dotnet new classlib -n Lab8.Tests
-dotnet sln add Lab8.Core Lab8.Benchmarks Lab8.Tests
-dotnet add Lab8.Benchmarks reference Lab8.Core
-dotnet add Lab8.Benchmarks package BenchmarkDotNet
-dotnet add Lab8.Tests reference Lab8.Core
-dotnet add Lab8.Tests package xunit.v3
-dotnet add Lab8.Tests package Microsoft.NET.Test.Sdk
-dotnet add Lab8.Tests package Shouldly
+mkdir -p .github/workflows
 ```
+
+Уся лабораторна виконується в цій директорії. Система, що тестується, — це ASP.NET Core API з Лабораторної 6 (шлях `Lecture-2/Lab6/demo`). Ви не пишете C#-код; ви пишете YAML, що запускає вже існуючий C#-код.
+
+> **Підказка**: Кожен workflow-файл спочатку закомітьте на окрему feature-гілку, щоб переконатися, що тригери працюють. Помилки у YAML видно лише після push.
 
 ## Завдання
 
-### Завдання 1 — Мікробенчмарки з BenchmarkDotNet
+### Завдання 1 — Перевірка імені гілки
 
-Створіть класи бенчмарків, які порівнюють:
+Створіть workflow `branch-name.yml`, який запускається на кожному `push`, окрім `main`, та провалює білд, якщо ім'я гілки не відповідає погодженій команді конвенції.
 
-1. **Конкатенацію рядків**: `string +=` vs `StringBuilder` vs `string.Join` vs `string.Concat` для 100, 1000 та 10000 ітерацій
-2. **Пошук у колекціях**: `List<T>.Contains` vs `HashSet<T>.Contains` vs `Dictionary<TKey,TValue>.ContainsKey` для 1000 та 100000 елементів
+#### Вимоги
 
-Кожен бенчмарк повинен:
+- Workflow запускається на `push` до будь-якої гілки, окрім `main`
+- Один job на `ubuntu-latest`
+- Один крок, що читає `GITHUB_REF_NAME` і перевіряє його bash-регулярним виразом
+- Якщо регулярний вираз не збігається — крок має завершитись `exit 1` з повідомленням `::error::...`
 
-- Використовувати `[MemoryDiagnoser]` для відстеження виділень пам'яті
-- Використовувати `[Params]` для тестування з різними розмірами вхідних даних
-- Включати `[Benchmark(Baseline = true)]` для порівняння
+#### Приклад каркаса
 
-**Приклад — бенчмарк конкатенації рядків**
+```yaml
+name: Branch Name Check
 
-```csharp
-using BenchmarkDotNet.Attributes;
-using System.Text;
+on:
+  push:
+    branches-ignore:
+      - main
 
-[MemoryDiagnoser]
-public class StringConcatenationBenchmarks
-{
-    [Params(100, 1000, 10000)]
-    public int Iterations { get; set; }
-
-    [Benchmark(Baseline = true)]
-    public string PlusEquals()
-    {
-        var result = string.Empty;
-        for (var i = 0; i < Iterations; i++)
-            result += "a";
-        return result;
-    }
-
-    [Benchmark]
-    public string StringBuilder()
-    {
-        var sb = new StringBuilder();
-        for (var i = 0; i < Iterations; i++)
-            sb.Append("a");
-        return sb.ToString();
-    }
-
-    [Benchmark]
-    public string StringJoin()
-    {
-        var parts = new string[Iterations];
-        Array.Fill(parts, "a");
-        return string.Join("", parts);
-    }
-
-    [Benchmark]
-    public string StringConcat()
-    {
-        var parts = new string[Iterations];
-        Array.Fill(parts, "a");
-        return string.Concat(parts);
-    }
-}
+jobs:
+  branch-name:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check branch name
+        run: |
+          BRANCH="${GITHUB_REF_NAME}"
+          # TODO: додайте регулярний вираз вашої конвенції
+          PATTERN="^(...)/.+$"
+          if [[ ! "$BRANCH" =~ $PATTERN ]]; then
+            echo "::error::Branch name '$BRANCH' does not match required pattern"
+            exit 1
+          fi
+          echo "Branch name '$BRANCH' is valid."
 ```
 
-**Приклад — запуск бенчмарків (Program.cs)**
+### Завдання 2 — Збірка та тестування з Testcontainers
 
-```csharp
-using BenchmarkDotNet.Running;
+Створіть workflow `ci.yml`, що запускається на `push` у `main` і збирає та тестує рішення з Лабораторної 6. Інтеграційні тести використовують Testcontainers для запуску PostgreSQL.
 
-BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly).Run(args);
+#### Вимоги
+
+- Workflow запускається на `push` у `main`
+- Один job `build-and-test` на `ubuntu-latest`
+- Кроки: `actions/checkout@v4`, `actions/setup-dotnet@v4` (.NET 10), `dotnet restore`, `dotnet build --no-restore`, `dotnet test --no-build --verbosity normal`
+
+#### Приклад каркаса
+
+```yaml
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: Lecture-2/Lab6/demo
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --no-restore
+
+      - name: Test
+        run: dotnet test --no-build --verbosity normal
 ```
 
-```bash
-dotnet run -c Release --project Lab8.Benchmarks -- --filter "*StringConcatenation*"
+#### Додатково — workflow `pr-tests.yml`
+
+Продублюйте ту саму логіку з тригером `pull_request` у `main`. Це той самий job, але запускається до merge, щоб блокувати PR з провальними тестами.
+
+```yaml
+on:
+  pull_request:
+    branches:
+      - main
 ```
 
-**Очікувана поведінка — конкатенація рядків**
+#### Перевірка
 
-| Метод | N=100 | N=1000 | N=10000 | Виділення пам'яті |
-|-------|-------|--------|---------|-------------------|
-| `string +=` | Швидко | Повільно | Дуже повільно | O(n^2) виділень |
-| `StringBuilder` | Швидко | Швидко | Швидко | O(n) виділень |
-| `string.Join` | Швидко | Швидко | Швидко | O(n) виділень |
-| `string.Concat` | Швидко | Швидко | Швидко | O(n) виділень |
+1. Вивчіть вивід job у Actions UI: чи видно, що Testcontainers стартує PostgreSQL-контейнер під час `dotnet test`?
+2. Свідомо зламайте один тест → push → job має бути червоним у PR → перевірте, що поява failed status check блокує кнопку Merge
 
-> При малих розмірах різниця незначна. Квадратичний шаблон виділень `+=` стає драматичним при 10000 ітерацій.
+#### Захист гілки main
 
-**Очікувана поведінка — пошук у колекціях**
+Після успішного зеленого білду у **Settings → Branches → Branch protection rules** додайте правило для `main`:
 
-| Метод | N=1000 | N=100000 | Часова складність |
-|-------|--------|----------|-------------------|
-| `List<T>.Contains` | Швидко | Повільно | O(n) |
-| `HashSet<T>.Contains` | Швидко | Швидко | O(1) амортизовано |
-| `Dictionary.ContainsKey` | Швидко | Швидко | O(1) амортизовано |
+- Require a pull request before merging ✓
+- Require status checks to pass before merging ✓
+- Обрати статус-чек `build-and-test` (з `pr-tests.yml`)
 
-**Мінімальна кількість тестів для Завдання 1**: 2 класи бенчмарків (по одному на порівняння).
+Підтвердіть, що прямий push у `main` тепер заборонений.
 
-> **Підказка**: Використовуйте `BenchmarkSwitcher` у вашому `Program.cs`, щоб можна було запускати окремі бенчмарки з `--filter`. Запуск усіх бенчмарків одночасно може зайняти понад годину.
+**Мінімум для Завдання 2**: 2 workflow-файли (`ci.yml` + `pr-tests.yml`) + скріншот налаштованого branch protection.
 
-### Завдання 2 — Аналіз виділення пам'яті
+### Завдання 3 — Валідація міграцій EF Core
 
-Напишіть код, який демонструє та порівнює:
+Створіть workflow `migration.yml`, що на pull request перевіряє, чи міграції EF Core можна чисто застосувати на свіжій PostgreSQL-БД, та зберігає ідемпотентний SQL-скрипт як артефакт.
 
-1. `Span<T>` vs нарізка `Array` — вимірювання zero-copy проти виділення пам'яті
-2. `struct` vs `class` для малих об'єктів даних — порівняння навантаження на GC
+#### Вимоги
 
-Для кожного порівняння задокументуйте:
+- Workflow запускається на `pull_request` у `main`
+- Встановлює інструменти: `dotnet tool install --global dotnet-ef`
+- Перевіряє, що модель синхронізована з міграціями: `dotnet ef migrations has-pending-model-changes`
+- Застосовує міграції до контейнерної БД: `dotnet ef database update`
+- Генерує ідемпотентний SQL-скрипт: `dotnet ef migrations script --idempotent --output migrations.sql`
+- Завантажує `migrations.sql` як артефакт
 
-- Виділені байти на операцію
-- Колекції GC Gen0/Gen1/Gen2
-- Який підхід кращий і чому
+#### Чому ідемпотентний скрипт
 
-**Приклад — Span vs нарізка масиву**
+Прод-БД оновлюють не через `dotnet ef database update`, а через SQL. Ідемпотентний скрипт можна застосувати кілька разів поспіль — він пропустить уже застосовані міграції. Це безпечно для rerun CD-пайплайну та для середовищ, де тягнуть кілька версій.
 
-```csharp
-using BenchmarkDotNet.Attributes;
+#### Приклад каркаса
 
-[MemoryDiagnoser]
-public class SpanVsArrayBenchmarks
-{
-    private byte[] _data = null!;
+```yaml
+name: Migration
 
-    [GlobalSetup]
-    public void Setup()
-    {
-        _data = new byte[10_000];
-        Random.Shared.NextBytes(_data);
-    }
+on:
+  pull_request:
+    branches:
+      - main
 
-    [Benchmark(Baseline = true)]
-    public byte[] ArraySlice()
-    {
-        // Виділяє новий масив при кожному виклику
-        var slice = new byte[100];
-        Array.Copy(_data, 5000, slice, 0, 100);
-        return slice;
-    }
+jobs:
+  validate-migrations:
+    runs-on: ubuntu-latest
 
-    [Benchmark]
-    public int SpanSlice()
-    {
-        // Нульове виділення: створює подання над існуючою пам'яттю
-        var slice = _data.AsSpan(5000, 100);
-        var sum = 0;
-        foreach (var b in slice)
-            sum += b;
-        return sum;
-    }
-}
+    defaults:
+      run:
+        working-directory: Lecture-2/Lab6/demo
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Install EF Core tools
+        run: dotnet tool install --global dotnet-ef
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --no-restore
+
+      - name: Check for pending model changes
+        run: dotnet ef migrations has-pending-model-changes --project src/Lectures.Api --startup-project src/Lectures.Api
+
+      - name: Apply migrations
+        env:
+          ConnectionStrings__DefaultConnection: "Host=localhost;Port=5432;Database=lectures;Username=postgres;Password=postgres"
+        run: dotnet ef database update --project src/Lectures.Api --startup-project src/Lectures.Api
+
+      - name: Generate idempotent SQL script
+        run: dotnet ef migrations script --idempotent --project src/Lectures.Api --startup-project src/Lectures.Api --output migrations.sql
+
+      - name: Upload migration script
+        uses: actions/upload-artifact@v4
+        with:
+          name: migration-sql
+          path: Lecture-2/Lab6/demo/migrations.sql
 ```
 
-**Приклад — Struct vs Class**
+#### Перевірка
 
-```csharp
-[MemoryDiagnoser]
-public class StructVsClassBenchmarks
-{
-    public class PointClass { public double X; public double Y; }
-    public struct PointStruct { public double X; public double Y; }
+1. Змініть модель EF Core (наприклад, додайте поле в сутність), але **не** додавайте нову міграцію → PR → крок `Check for pending model changes` має провалитись → ідеально, CI впіймав забуту міграцію
+2. Додайте міграцію локально (`dotnet ef migrations add AddField`) → PR → workflow зелений → у вкладці Summary → Artifacts завантажте `migration-sql` і огляньте SQL
 
-    [Params(1000, 100_000)]
-    public int Count { get; set; }
+**Мінімум для Завдання 3**: 1 workflow-файл + демонстрація двох PR (один із забутою міграцією, один із застосованою).
 
-    [Benchmark(Baseline = true)]
-    public double SumWithClass()
-    {
-        var sum = 0.0;
-        for (var i = 0; i < Count; i++)
-        {
-            var p = new PointClass { X = i, Y = i * 2.0 };
-            sum += p.X + p.Y;
-        }
-        return sum;
-    }
+### Завдання 4 — Performance-тестування з k6
 
-    [Benchmark]
-    public double SumWithStruct()
-    {
-        var sum = 0.0;
-        for (var i = 0; i < Count; i++)
-        {
-            var p = new PointStruct { X = i, Y = i * 2.0 };
-            sum += p.X + p.Y;
-        }
-        return sum;
-    }
-}
+Створіть workflow `k6.yml`, який на pull request або вручну стартує API і проганяє k6-сценарій (smoke/load/stress/spike) проти нього.
+
+#### Вимоги
+
+- Два тригери:
+  - `pull_request` у `main`
+  - `workflow_dispatch` з `inputs.test-type` як `choice` (`smoke`, `load`, `stress`, `spike`) зі значенням за замовчуванням `smoke`
+- Встановити `grafana/setup-k6-action@v1`
+- Запустити API у фоні: `dotnet run --project src/Lectures.Api --no-build &`
+- Чекати готовності API через цикл з `curl -sf http://localhost:5067/health/ready`
+- Визначити тип тесту:
+  - Для `workflow_dispatch` — з `inputs.test-type`
+  - Для `pull_request` — завжди `smoke` (швидкий тест, не блокує PR надовго)
+- Запустити `k6 run` відповідним скриптом, зберегти `summary-export=results.json`
+- Завантажити `results.json` як артефакт
+
+#### Приклад каркаса (ключові фрагменти)
+
+```yaml
+name: k6 Performance Tests
+
+on:
+  pull_request:
+    branches:
+      - main
+
+  workflow_dispatch:
+    inputs:
+      test-type:
+        description: 'k6 test type to run'
+        required: true
+        default: 'smoke'
+        type: choice
+        options:
+          - smoke
+          - load
+          - stress
+          - spike
+
+jobs:
+  k6:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: Lecture-2/Lab6/demo
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Setup k6
+        uses: grafana/setup-k6-action@v1
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --no-restore
+
+      - name: Start API
+        env:
+          ASPNETCORE_URLS: http://localhost:5067
+          ConnectionStrings__DefaultConnection: "Host=localhost;Port=5432;Database=lectures;Username=postgres;Password=postgres"
+        run: dotnet run --project src/Lectures.Api --no-build &
+
+      - name: Wait for API readiness
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:5067/health/ready > /dev/null 2>&1; then
+              echo "API is ready!"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "API failed to become ready"
+          exit 1
+
+      - name: Determine test type
+        id: test-type
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "type=${{ inputs.test-type }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "type=smoke" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run k6 ${{ steps.test-type.outputs.type }} test
+        working-directory: Lecture-2/Lab6/tests/Lab6.Api.Tests.Performance
+        run: k6 run -e BASE_URL=http://localhost:5067 scripts/${{ steps.test-type.outputs.type }}-test.ts --summary-export=results.json
+
+      - name: Upload k6 results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: k6-${{ steps.test-type.outputs.type }}-results
+          path: Lecture-2/Lab6/tests/Lab6.Api.Tests.Performance/results.json
 ```
 
-**Очікувана поведінка — порівняння виділення пам'яті**
+#### Перевірка
 
-| Порівняння | Виділення в купі | Колекції GC | Переможець |
-|------------|-----------------|-------------|------------|
-| Нарізка `Span<T>` vs `Array.Copy` | 0 Б vs ~128 Б | 0 vs Gen0 | `Span<T>` |
-| `struct` vs `class` (малі дані) | 0 Б vs 24+ Б на екземпляр | 0 vs Gen0 | `struct` |
+1. Відкрийте PR, що змінює код API → workflow запускається з `test-type=smoke`
+2. У вкладці Actions натисніть **Run workflow** → виберіть `load` → workflow стартує вручну
+3. Завантажте артефакт `k6-smoke-results` → огляньте `results.json`
 
-**Мінімальна кількість тестів для Завдання 2**: 2 класи бенчмарків (по одному на порівняння).
-
-### Завдання 3 — Тести на регресію продуктивності
-
-Напишіть тести xUnit, які забезпечують базові показники продуктивності:
-
-```csharp
-[Fact]
-public void SortAlgorithm_ShouldCompleteWithin50ms_For10000Elements()
-{
-    var data = GenerateRandomArray(10000);
-    var sw = Stopwatch.StartNew();
-
-    SortService.QuickSort(data);
-
-    sw.Stop();
-    sw.ElapsedMilliseconds.ShouldBeLessThan(50);
-}
-```
-
-Створіть тести для:
-
-1. Алгоритм сортування завершується в межах часового бюджету
-2. Алгоритм пошуку завершується в межах часового бюджету
-3. Серіалізація/десеріалізація в межах часового бюджету
-4. Задокументуйте, чому обрані ці порогові значення
-
-**Приклад — повний клас тестів на регресію**
-
-```csharp
-using System.Diagnostics;
-using System.Text.Json;
-using Shouldly;
-
-public class PerformanceRegressionTests
-{
-    [Fact]
-    public void QuickSort_10000Elements_ShouldCompleteWithin50ms()
-    {
-        var data = Enumerable.Range(0, 10_000)
-            .OrderBy(_ => Random.Shared.Next())
-            .ToArray();
-
-        var sw = Stopwatch.StartNew();
-        Array.Sort(data);
-        sw.Stop();
-
-        sw.ElapsedMilliseconds.ShouldBeLessThan(50,
-            "QuickSort for 10k elements exceeded the 50 ms budget");
-    }
-
-    [Fact]
-    public void BinarySearch_100000Elements_ShouldCompleteWithin1ms()
-    {
-        var data = Enumerable.Range(0, 100_000).ToArray();
-
-        var sw = Stopwatch.StartNew();
-        Array.BinarySearch(data, 99_999);
-        sw.Stop();
-
-        sw.ElapsedMilliseconds.ShouldBeLessThan(1,
-            "BinarySearch for 100k elements exceeded the 1 ms budget");
-    }
-
-    [Fact]
-    public void JsonSerialization_LargeObject_ShouldCompleteWithin20ms()
-    {
-        var data = Enumerable.Range(0, 1000)
-            .Select(i => new { Id = i, Name = $"Item {i}", Value = i * 1.5 })
-            .ToList();
-
-        var sw = Stopwatch.StartNew();
-        var json = JsonSerializer.Serialize(data);
-        var _ = JsonSerializer.Deserialize<List<object>>(json);
-        sw.Stop();
-
-        sw.ElapsedMilliseconds.ShouldBeLessThan(20,
-            "JSON round-trip for 1000 objects exceeded the 20 ms budget");
-    }
-}
-```
-
-**Мінімальна кількість тестів для Завдання 3**: 3 тестових методи (сортування, пошук, серіалізація).
-
-> **Підказка**: Обирайте порогові значення, які стабільно проходять на типовій машині розробника, але були б невдалими, якщо хтось введе регресію O(n^2). Запустіть тест 10 разів локально, щоб знайти стабільну верхню межу, а потім додайте запас безпеки 2-3x.
-
-> **Підказка**: Якщо тести нестабільні в CI через спільні раннери, розгляньте використання `[Trait("Category", "Performance")]` та запуск їх окремо від модульних тестів.
+**Мінімум для Завдання 4**: 1 workflow-файл + thresholds у smoke-скрипті + запис в `REPORT.md` із обраними SLO.
 
 ## Оцінювання
 
 | Критерії |
 |----------|
-| Завдання 1 — Бенчмарки BenchmarkDotNet |
-| Завдання 2 — Аналіз виділення пам'яті |
-| Завдання 3 — Тести на регресію продуктивності |
-| Аналіз результатів у `REPORT.md` |
-| Коректна методологія бенчмарків (розігрів, ітерації) |
+| Завдання 1 — Workflow перевірки імені гілки + обґрунтування конвенції |
+| Завдання 2 — CI та PR workflows + налаштований branch protection |
+| Завдання 3 — Workflow міграцій з services, ідемпотентним SQL-скриптом як артефактом |
+| Завдання 4 — k6 workflow з двома тригерами, порогами та артефактом результатів |
+| `REPORT.md` з рішеннями, обґрунтуваннями та скріншотами запусків |
+| Усі workflows зелені у репозиторії принаймні на одному push/PR |
 
 ## Здача роботи
 
-- Рішення з усіма трьома проєктами
-- `REPORT.md` з таблицями результатів бенчмарків та аналізом
-- Запуск бенчмарків у режимі Release: `dotnet run -c Release --project Lab8.Benchmarks`
+- 4 workflow-файли у `.github/workflows/`: `branch-name.yml`, `ci.yml` (+ `pr-tests.yml`), `migration.yml`, `k6.yml`
+- `thresholds` у `scripts/smoke-test.ts`
+- `REPORT.md` з:
+  - Обраною конвенцією імен гілок та обґрунтуванням
+  - Скріншотом Branch Protection
+  - Посиланнями на успішні запуски workflows (Actions UI)
+  - Обраними k6 SLO та обґрунтуванням
+- Один merged PR, що пройшов усі checks
+
+> **Підказка**: Для діагностики зламаного workflow — увімкніть [debug logs](https://docs.github.com/en/actions/learn-github-actions/variables#configuring-default-environment-variables-for-a-repository): додайте `ACTIONS_STEP_DEBUG=true` як secret і перезапустіть job.
 
 ## Посилання
 
-- [BenchmarkDotNet Documentation](https://benchmarkdotnet.org/articles/overview.html)
-- [BenchmarkDotNet — MemoryDiagnoser](https://benchmarkdotnet.org/articles/features/memory-diagnoser.html)
-- [BenchmarkDotNet — Parameterization](https://benchmarkdotnet.org/articles/features/parameterization.html)
-- [Span\<T\> Usage Guidelines](https://learn.microsoft.com/en-us/dotnet/standard/memory-and-spans/memory-t-usage-guidelines)
-- [ObjectPool in ASP.NET Core](https://learn.microsoft.com/en-us/aspnet/core/performance/objectpool)
-- [ValueTask\<T\> — Understanding Why and When](https://devblogs.microsoft.com/dotnet/understanding-the-whys-whats-and-whens-of-valuetask/)
-- [GC Fundamentals (.NET)](https://learn.microsoft.com/en-us/dotnet/standard/garbage-collection/fundamentals)
-- [dotnet-counters](https://learn.microsoft.com/en-us/dotnet/core/diagnostics/dotnet-counters)
-- [dotnet-trace](https://learn.microsoft.com/en-us/dotnet/core/diagnostics/dotnet-trace)
-- [xUnit v3 Documentation](https://xunit.net/docs/getting-started/v3/cmdline)
-- [Shouldly Assertion Library](https://docs.shouldly.org/)
+- [GitHub Actions Documentation](https://docs.github.com/en/actions) — офіційна документація
+- [Workflow syntax reference](https://docs.github.com/en/actions/reference/workflow-syntax-for-github-actions) — повний довідник YAML-синтаксису
+- [Events that trigger workflows](https://docs.github.com/en/actions/reference/events-that-trigger-workflows) — усі тригери та їх параметри
+- [`actions/checkout`](https://github.com/actions/checkout)
+- [`actions/setup-dotnet`](https://github.com/actions/setup-dotnet)
+- [`actions/upload-artifact`](https://github.com/actions/upload-artifact)
+- [`grafana/setup-k6-action`](https://github.com/grafana/setup-k6-action) — встановлення k6 у workflow
+- [EF Core — Applying migrations](https://learn.microsoft.com/en-us/ef/core/managing-schemas/migrations/applying) — `dotnet ef database update`, `script --idempotent`
+- [EF Core — has-pending-model-changes](https://learn.microsoft.com/en-us/ef/core/cli/dotnet#dotnet-ef-migrations-has-pending-model-changes)
+- [Testcontainers для .NET](https://dotnet.testcontainers.org/) — робота з Docker із коду тесту
+- [k6 — Thresholds](https://grafana.com/docs/k6/latest/using-k6/thresholds/) — визначення SLO
+- [Managing a branch protection rule](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-a-branch-protection-rule)
+- [Conventional Commits](https://www.conventionalcommits.org/) — популярна конвенція для імен гілок та commit messages
+- Лекція 6 — CI/CD та управління тестуванням (у цьому курсі)
